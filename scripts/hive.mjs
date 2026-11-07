@@ -15,6 +15,7 @@ import { fromPreset, PRESETS, ruleCommand } from '../lib/presets.mjs';
 import { complete, cpuCount, inventory, loadEnvFile } from '../lib/providers.mjs';
 import { clean, commandPrompt, loadSettings, saveSettings } from '../lib/settings.mjs';
 import { fingerprint, newIdentity } from '../lib/keys.mjs';
+import { gatePaid, nextApiMode } from '../lib/safety.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 process.chdir(ROOT);
@@ -174,12 +175,16 @@ createServer(async (req, res) => {
       if (req.method !== 'POST') return json(res, 405, { error: 'method' });
       const b = await body(req);
       if (url.pathname === '/api/preset') {
-        settings = { ...fromPreset(b.name, cores), disabled: settings.disabled, problems: settings.problems };
+        settings = gatePaid({ ...fromPreset(b.name, cores), disabled: settings.disabled, problems: settings.problems, apiMode: settings.apiMode });
+      } else if (url.pathname === '/api/apimode') {
+        settings = gatePaid({ ...settings, apiMode: nextApiMode(settings.apiMode, b) });
+        if (b.on === true && !settings.apiMode.on) return json(res, 400, { error: 'API mode stays off: tick the three boxes and type the phrase exactly.' });
       } else if (url.pathname === '/api/settings') {
         settings = clean(b.settings ?? {}, cores, settings);
       } else if (url.pathname === '/api/keys') {
         const p = PROVIDERS[b.provider];
         if (!p) return json(res, 400, { error: 'unknown provider' });
+        if (p.tier === 'paid' && b.key && !settings.apiMode?.on) return json(res, 400, { error: 'This is a paid API: turn API mode on first (it explains the risks).' });
         if (b.key) await listModels(b.provider, b.key).catch((e) => { throw new Error(`the key did not work: ${e.message}`); });
         saveKey(p.env, b.key ? String(b.key).trim() : '');
         await refreshInventory();

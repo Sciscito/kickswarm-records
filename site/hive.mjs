@@ -14,6 +14,7 @@ import { BEE, icon } from './icons.mjs';
 import { createIdentity, getIdentity, identitySummary } from './identity.mjs';
 import { sendPresence } from './lib/presence.mjs';
 import { fit, needFor, weightOf } from './lib/delegate.mjs';
+import { ACCEPT_PHRASE, API_MODE_RISKS, BILLING_WARNING, gatePaid, moneyOk, nextApiMode } from './lib/safety.mjs';
 
 const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
 
@@ -39,6 +40,7 @@ function localBackend(token) {
     state: () => api('state'),
     preset: (name) => api('preset', { name }),
     settings: (settings) => api('settings', { settings }),
+    apiMode: (req) => api('apimode', req),
     key: (provider, key) => api('keys', { provider, key }),
     refresh: () => api('inventory', {}),
     start: () => api('start', {}),
@@ -60,7 +62,7 @@ function localBackend(token) {
 // Browser backend: the hive runs in this tab.
 function browserBackend(DATA) {
   const cores = Math.max(1, navigator.hardwareConcurrency || 2);
-  let settings = store.get('ks-hive-settings', null) ?? { ...fromPreset('balanced', cores), workers: Math.max(1, Math.min(4, cores - 1)) };
+  let settings = gatePaid(store.get('ks-hive-settings', null) ?? { ...fromPreset('balanced', cores), workers: Math.max(1, Math.min(4, cores - 1)) });
   let keys = store.get('ks-hive-keys', {});
   let sources = [];
   const stats = store.get('ks-hive-stats', {});
@@ -128,7 +130,7 @@ function browserBackend(DATA) {
     },
     hive: snapshot(),
   });
-  const allowed = (s) => settings.tiers?.[s.tier] !== false && !(settings.disabled ?? []).includes(s.key);
+  const allowed = (s) => moneyOk(s, settings) && settings.tiers?.[s.tier] !== false && !(settings.disabled ?? []).includes(s.key);
   const quotaLeft = (s) => ((usage[today()] ??= {})[s.key] ?? 0) < (settings.quotas?.[s.tier] ?? 0);
   function pickSource(busy = new Set(), need = 'any') {
     // First a model that fits the task (big for hard thinking, small for light work), then any model.
@@ -262,9 +264,11 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
   return {
     mode: 'browser',
     async state() { if (!sources.length) await discover(); return publicState(); },
-    async preset(name) { settings = { ...fromPreset(name, cores), workers: Math.max(1, Math.min(cores - 1 || 1, Math.round(cores * PRESETS[name].cores))), disabled: settings.disabled, problems: settings.problems }; save(); return publicState(); },
-    async settings(s) { settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) } }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); save(); return publicState(); },
+    async apiMode(req) { settings = gatePaid({ ...settings, apiMode: nextApiMode(settings.apiMode, req) }); save(); if (req.on === true && !settings.apiMode.on) throw new Error('API mode stays off: tick the three boxes and type the phrase exactly.'); return publicState(); },
+    async preset(name) { settings = { ...fromPreset(name, cores), apiMode: settings.apiMode, workers: Math.max(1, Math.min(cores - 1 || 1, Math.round(cores * PRESETS[name].cores))), disabled: settings.disabled, problems: settings.problems }; settings = gatePaid(settings); save(); return publicState(); },
+    async settings(s) { const { apiMode: _ignored, ...patch } = s; s = patch; settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) } }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); settings = gatePaid(settings); save(); return publicState(); },
     async key(provider, key) {
+      if (key && PROVIDERS[provider]?.tier === 'paid' && !settings.apiMode?.on) throw new Error('This is a paid API: turn API mode on first (it explains the risks).');
       if (key) await listModels(provider, key).catch((e) => { throw new Error(`the key did not work: ${e.message}`); });
       keys = { ...keys, [provider]: key || undefined };
       if (!key) delete keys[provider];
@@ -537,11 +541,24 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
             <div class="addkey">${local ? '<button class="btn small" id="claude-connect">Also connect Claude Desktop</button>' : '<a class="btn small" href="#/mission">Hunt with my chat app</a>'}</div></div>
           ${inv.sources.some((x) => x.key.startsWith('gemini:')) ? '' : `<div class="addrow"><b>${icon('key')} Google Gemini, free tier</b><small>With your Google account: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a> → “Create API key” → paste it here.</small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your Gemini key" data-keyfor="gemini"><button class="btn small" data-savekey="gemini">Connect</button></div></div>`}
           <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider${local ? '' : '; search programs never see them'}.</p>
+          <p class="moneywarn">⚠ ${esc(BILLING_WARNING)} On OpenRouter, the hive only uses models whose every price is zero; to be extra safe, set the key's credit limit to $0 in OpenRouter (Settings → API keys).</p>
         </div>
         <details class="add"><summary>More free providers, cheap Chinese APIs, local models</summary>
           ${local ? (inv.sources.some((x) => x.kind === 'ollama') ? '<p class="hint">Ollama detected: its best model is in your sources.</p>' : '<div class="addrow"><b>Local models (optional)</b><small>Only if you want to: installs Ollama and qwen2.5-coder 7B (about 5 GB) to run models on this computer.</small><div class="addkey"><button class="btn small" id="ollama-install">Install it for me</button></div></div>') : ''}
           ${!local && !inv.sources.some((x) => x.kind === 'webllm') ? `<div class="addrow"><b>On-device model (no key, no account)</b><small>${navigator.gpu ? 'Runs on this device’s graphics chip. Downloads about 1 GB once. Best on a computer or a recent phone, on Wi-Fi.' : 'Needs WebGPU (recent Chrome or Edge).'}</small>${navigator.gpu ? '<div class="addkey"><button class="btn small" id="webllm-on">Download and use</button></div>' : ''}</div>` : ''}
-          ${['groq', 'mistral', 'cerebras', 'sambanova', 'github', 'deepseek', 'moonshot', 'zai', 'anthropic', 'openai'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
+          ${['groq', 'mistral', 'cerebras', 'sambanova', 'github'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
+        </details>
+        <details class="add apimode ${s.apiMode?.on ? 'on' : ''}"><summary>${s.apiMode?.on ? '💳 API mode is ON: paid APIs allowed' : '🔒 API mode (paid, pay per use): for organisations, off'}</summary>
+          ${s.apiMode?.on ? `
+            <p class="moneywarn">Paid calls are billed to the key's owner. Daily limit now: <b>${s.quotas?.paid ?? 0}</b> call(s) per paid source (set it in Rules; 0 = none). Turned on ${esc((s.apiMode.at ?? '').slice(0, 16).replace('T', ' '))}.</p>
+            ${['deepseek', 'moonshot', 'zai', 'anthropic', 'openai'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)} <small class="paidtag">PAID</small></b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a> · set a spending limit there first</small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
+            <button class="btn" id="apimode-off">Turn API mode off (paid calls stop at once)</button>`
+          : `
+            <p>Most people never need this: free models, your processor and your subscriptions are enough. API mode lets a hive call <b>paid</b> APIs (OpenAI, Anthropic, DeepSeek, Kimi, GLM) with your own keys. Read this first:</p>
+            <ol class="risks">${API_MODE_RISKS.map((r, k) => `<li><label><input type="checkbox" data-risk="${k}"> ${esc(r)}</label></li>`).join('')}</ol>
+            <p>To turn it on, tick the first three boxes and type <b class="mono">${ACCEPT_PHRASE}</b>:</p>
+            <div class="addkey"><input id="apimode-phrase" autocomplete="off" placeholder="${ACCEPT_PHRASE}"><button class="btn small" id="apimode-on">Turn API mode on</button></div>
+            <p class="hint">Even on, paid calls stay at 0 per day until you set a daily limit in Rules. Voice commands, presets and AI suggestions can never turn API mode on.</p>`}
         </details>
         ${local && inv.tools?.length ? `<p class="hint">Tools your agents already have (MCP): ${inv.tools.map((t) => esc(t.name)).join(', ')}. The hive does not use them for searching; the setup prompt below may.</p>` : ''}
       </section>
@@ -654,6 +671,11 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     app.querySelectorAll('[data-submit]').forEach((b) => (b.onclick = () => submitUrl(st.hive.improvements[Number(b.dataset.submit)].sub)));
     $('#installapp')?.addEventListener('click', async () => { await window.__ksInstall.prompt(); window.__ksInstall = null; render(); });
     $('#invite2').onclick = () => invite();
+    $('#apimode-on')?.addEventListener('click', () => {
+      const checks = [0, 1, 2].filter((k) => app.querySelector(`[data-risk="${k}"]`)?.checked).length;
+      apply(() => be.apiMode({ on: true, checks, phrase: $('#apimode-phrase').value }));
+    });
+    $('#apimode-off')?.addEventListener('click', () => apply(() => be.apiMode({ on: false })));
     $('#epic-invite')?.addEventListener('click', () => invite());
     $('#epic-all')?.addEventListener('click', () => patch({ problems: [] }));
     $('#copyagent').onclick = () => copy(agentSetupPrompt(), 'Setup prompt copied: paste it into your agent');
