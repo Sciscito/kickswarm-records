@@ -163,3 +163,58 @@ pre.prompt { white-space: pre-wrap; background: var(--bg2); border: 1px solid va
 .share { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .gallery figure { margin: 0; }
 .gallery figure .share { justify-content: center; }
+
+/* hive */
+.hive-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.hive-head .mode { color: var(--dim); max-width: 40em; }
+.go { display: grid; justify-items: center; gap: 2px; min-width: 190px; padding: 18px 26px; border-radius: 26px; border: 2px solid var(--honey); background: var(--card); color: var(--ink); cursor: pointer; font: inherit; }
+.go b { font: 600 22px var(--serif); }
+.go small { color: var(--dim); }
+.go .bee { font-size: 30px; }
+.go.on { background: var(--honey); color: #1a1206; }
+.go.on small { color: #4a3510; }
+.go.on .bee { animation: buzz 1.2s ease-in-out infinite; }
+@keyframes buzz { 0%,100% { transform: translate(0,0) rotate(0); } 25% { transform: translate(3px,-2px) rotate(8deg); } 75% { transform: translate(-3px,1px) rotate(-6deg); } }
+@media (prefers-reduced-motion: reduce) { .go.on .bee { animation: none; } }
+.voice { display: flex; gap: 8px; margin: 20px 0 8px; }
+.voice input { flex: 1; min-width: 0; background: var(--bg2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; font: inherit; }
+.presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 860px) { .presets { grid-template-columns: repeat(2, 1fr); } }
+.preset { text-align: left; display: grid; gap: 4px; padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; font: inherit; }
+.preset span { font-size: 26px; }
+.preset small { color: var(--dim); font-size: 13px; line-height: 1.4; }
+.preset.sel { border-color: var(--honey); box-shadow: 0 0 0 2px color-mix(in srgb, var(--honey) 35%, transparent); }
+.src, .tier { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.tier { padding-top: 14px; }
+.src > div { flex: 1; min-width: 0; }
+.src small, .tier small { display: block; color: var(--dim); font-size: 12px; }
+.tier small { display: inline; margin-left: auto; }
+.src:not(.on) { opacity: .55; }
+.src .num { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); }
+.switch { position: relative; width: 38px; height: 22px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: .2s; cursor: pointer; }
+.switch span::after { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%; background: var(--ink); transition: .2s; }
+.switch input:checked + span { background: var(--honey); }
+.switch input:checked + span::after { transform: translateX(16px); background: #1a1206; }
+.switch input:focus-visible + span { outline: 2px solid var(--honey); outline-offset: 2px; }
+.add summary { cursor: pointer; margin-top: 12px; color: var(--honey); }
+.addrow { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.addrow small { display: block; color: var(--dim); font-size: 12px; }
+.addkey { display: flex; gap: 6px; margin-top: 6px; }
+.addkey input, .row input[type=number], .row input[type=time] { background: var(--bg2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; min-width: 0; }
+.addkey input { flex: 1; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+label.row { justify-content: space-between; }
+.row input[type=number] { width: 90px; }
+.hint { color: var(--dim); font-size: 13px; }
+.hunts label { display: inline-flex; gap: 6px; margin-right: 12px; }
+.slots { display: grid; gap: 8px; margin-bottom: 12px; }
+.slotcard { background: var(--bg2); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.bar { height: 4px; background: var(--line); border-radius: 4px; margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 100%; background: var(--honey); transform-origin: left; animation: fill linear forwards; }
+@keyframes fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.hivelog { max-height: 300px; overflow: auto; font-size: 13px; }
+.hivelog time { margin: 0 8px 0 0; }
+
+.t-known { color: #7fd1c4; }

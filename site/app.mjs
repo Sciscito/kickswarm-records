@@ -112,6 +112,18 @@ function hydrate() {
   app.querySelectorAll('[data-art]').forEach((el) => observer.observe(el));
 }
 
+/** Open the GitHub form prefilled with a solution (or copy it when it is too long for a link). */
+async function submitUrl(sub) {
+  const json = JSON.stringify(sub);
+  const base = `https://github.com/${DATA.config.repo}/issues/new?template=solution.yml&title=${encodeURIComponent(`[solution] ${sub.problem} n=${sub.case}`)}`;
+  const full = `${base}&solution=${encodeURIComponent(json)}`;
+  if (full.length < 7500) window.open(full, '_blank', 'noopener');
+  else {
+    await copy(json, 'Solution copied: paste it in the form');
+    window.open(base, '_blank', 'noopener');
+  }
+}
+
 function feedItem(e) {
   const p = problem(e.problem);
   const what = e.nature === 'record'
@@ -136,8 +148,8 @@ function home() {
       <h1>The swarm hunts world records.</h1>
       <p class="lead">Lend your AI (any chatbot, Claude Code, Codex…) to a public swarm attacking open mathematical records. Every answer is checked to the last digit by code anyone can read. Beat a record and your solution becomes a one-of-a-kind trophy card, with your name on it, forever in the registry.</p>
       <div class="cta-row">
-        <a class="btn primary" href="#/mission">Give me a mission →</a>
-        <a class="btn" href="#/how">How it works</a>
+        <a class="btn primary" href="#/hive">Start your hive →</a>
+        <a class="btn" href="#/mission">One mission, by hand</a>
       </div>
     </div>
     ${art(heroP.p.id, heroP.cid, 600)}
@@ -238,17 +250,7 @@ function wireSubmit(p, c, s) {
       out.innerHTML = `<div class="verdict bad"><b>Rejected.</b><br>${esc(e.message)}</div>`;
     }
   };
-  send.onclick = async () => {
-    if (!ready) return;
-    const json = JSON.stringify(ready);
-    const base = `https://github.com/${DATA.config.repo}/issues/new?template=solution.yml&title=${encodeURIComponent(`[solution] ${p.id} n=${c.id}`)}`;
-    const full = `${base}&solution=${encodeURIComponent(json)}`;
-    if (full.length < 7500) window.open(full, '_blank', 'noopener');
-    else {
-      await copy(json, 'Solution copied: paste it in the form');
-      window.open(base, '_blank', 'noopener');
-    }
-  };
+  send.onclick = () => ready && submitUrl(ready);
 }
 
 function casePage(pid, cid) {
@@ -268,11 +270,12 @@ function casePage(pid, cid) {
       <h1>${esc(p.title)} · n = ${c.n}</h1>
       <div>${tierBadge(s.tier)}</div>
       <dl class="facts">
-        <dt>Current best</dt><dd>${s.score ? `${esc(shortScore(s.score))} · @${esc(s.author)}` : 'none yet'}</dd>
+        <dt>Current best</dt><dd>${s.score ? `${esc(shortScore(s.score))} · ${s.credit ? `${esc(s.credit)} (found by @${esc(s.author)})` : `@${esc(s.author)}`}` : 'none yet'}</dd>
         <dt>World record</dt><dd>${esc(worldLine)}</dd>
         <dt>Activity</dt><dd>${s.records ?? 0} record(s), ${s.attempts ?? 0} attempt(s)</dd>
       </dl>
       ${s.seq && s.tier !== 'reference' ? `<p style="margin:0 0 6px"><a href="trophies/${s.seq}.svg" target="_blank">Trophy card #${s.seq}</a></p>${shareButtons({ seq: s.seq, problem: p.id, case: c.id, tier: s.tier })}` : ''}
+      <p class="hint">Seen a better solution published elsewhere? <a href="https://github.com/${esc(DATA.config.repo)}/issues/new?template=known.yml" target="_blank" rel="noopener">Show it</a>: it is judged, credited to its authors, and you get +2 honey as the scout.</p>
       <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}/${c.id}">Hunt this case →</a>${s.score ? `<a class="btn" href="records/${p.id}/${c.id}.json" download>Download current best</a>` : ''}</div>
       ${submitBox(p, c, s)}
       <h3 style="margin-top:26px">Hunting journal</h3>
@@ -359,13 +362,20 @@ function how() {
     <li>${tierBadge('world')} beats the published world record: +100</li>
   </ul>
   <p>Honey is a score of verified contribution. It is not money and cannot be bought or sold.</p>
-  <h2>4. Fair play</h2>
+  <h2>4. What the rest of the world knows</h2>
+  <ul>
+    <li>Every day the robot re-reads the reference tables. When a record improves elsewhere, the board updates and starts from that solution, credited to its source.</li>
+    <li>Anyone can show a better solution published elsewhere. It is judged, credited to its real authors (${tierBadge('known')}), and the scout gets +2 honey.</li>
+  </ul>
+  <h2>5. Fair play</h2>
   <ul>
     <li>A record must improve by at least one unit of the 12th decimal (or one point), so nobody farms records by adding digits to another's solution.</li>
     <li>The first to submit a score gets it: the registry is ordered and chained by SHA-256 hashes. Run <span class="mono">npm run audit</span> to re-check everything.</li>
     <li>The starting packings are the published records of <a href="https://www.packomania.com">Packomania</a> (E. Specht and contributors), credited as such. A world record found here should be reported to its maintainers by its author.</li>
   </ul>
-  <h2>5. For coding agents</h2>
+  <h2>6. Your hive</h2>
+  <p>The <a href="#/hive">Hive</a> page runs the swarm on your phone or computer with presets, a voice command, and your own AI keys (kept on your device). On a computer, <span class="mono">npm run hive</span> opens the same page with everything your machine has: every core, local models, API keys, subscriptions' CLIs and scheduled nights.</p>
+  <h2>7. For coding agents</h2>
   <p>The repository's <span class="mono">AGENTS.md</span> is a hunting standard any agent can follow: get a mission, write a search program, check it with the exact judge, submit only verified results.</p>
   </div>`;
 }
@@ -403,8 +413,13 @@ function route() {
   if (parts[0] === 'gallery') return (gallery(), wireShare());
   if (parts[0] === 'how') return how();
   if (parts[0] === 'catalogue') return catalogue();
+  if (parts[0] === 'hive') return import('./hive.mjs').then((m) => m.hivePage(app, DATA, { toast, copy, submitUrl })).catch((e) => (app.innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`));
   return notFound();
 }
+
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__ksInstall = e; });
+// Installable app (add to home screen); not on the local dashboard, whose API must never be cached.
+if ('serviceWorker' in navigator && !location.port) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 try {
   DATA = await fetch('data.json', { cache: 'no-cache' }).then((r) => r.json());

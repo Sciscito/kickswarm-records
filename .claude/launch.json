@@ -9,6 +9,15 @@
         "8787"
       ],
       "port": 8787
+    },
+    {
+      "name": "hive",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "scripts/hive.mjs",
+        "7878"
+      ],
+      "port": 7878
     }
   ]
 }

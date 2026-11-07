@@ -1,7 +1,8 @@
 // Built-in searcher for no-three-in-line: min-conflicts local search with two points per row,
 // seeded from the current best when there is one. See README.md for the contract.
+// Plain JavaScript, no imports: it runs in Node (solvers/run.mjs) and in a browser Web Worker.
 
-const input = JSON.parse(await new Promise((r) => { let s = ''; process.stdin.on('data', (d) => (s += d)); process.stdin.on('end', () => r(s)); }));
+export async function search(input, report) {
 const { n, start, seconds } = input;
 const deadline = Date.now() + (seconds - 2) * 1000;
 let rnd = input.seed >>> 0 || 1;
@@ -30,7 +31,7 @@ function validSubset(P) {
   }
 }
 let best = start?.points?.length ?? 0;
-const emit = (P) => { if (P.length > best) { best = P.length; console.log('BEST ' + JSON.stringify({ points: P })); } };
+const emit = (P) => { if (P.length > best) { best = P.length; report({ points: P.map((p) => [...p]) }); } };
 
 while (Date.now() < deadline && best < 2 * n) {
   // Two points per row; rows that the start solution covers keep its points as a seed.
@@ -62,4 +63,5 @@ while (Date.now() < deadline && best < 2 * n) {
     P[i][1] = y;
   }
   emit(validSubset(P));
+}
 }

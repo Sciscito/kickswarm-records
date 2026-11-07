@@ -16,7 +16,7 @@ process.chdir(dir);
 {
   const f = join(dir, 'problems', 'no-three-in-line', 'problem.json');
   const p = JSON.parse(readFileSync(f, 'utf8'));
-  p.cases.unshift({ id: '6', n: 6, max: '12', world: { score: '12', date: '1917' } });
+  p.cases.unshift({ id: '6', n: 6, max: '12', world: { score: '12', date: '1917' } }, { id: '5', n: 5, max: '10', world: { score: '10', date: '1917' } });
   writeFileSync(f, JSON.stringify(p));
 }
 const { extractJson, processSubmission } = await import(join(dir, 'lib', 'process.mjs').replace(/\\/g, '/').replace(/^([A-Z]):/, 'file:///$1:'));
@@ -97,4 +97,12 @@ test('circles: resubmitting the published packing is only an attempt; a world re
   r = await processSubmission({ problem: 'circles-in-square', case: '480', centers: shrunk }, { author: 'frank' });
   assert.equal(r.status, 'attempt');
   assert.match(r.message, /does not beat/);
+});
+
+test('a better solution known elsewhere is credited to its authors and becomes the one to beat', async () => {
+  const r = await processSubmission({ problem: 'no-three-in-line', case: '5', points: perfect(5), credit: 'H. Dudeney (1917)' }, { author: 'scout' });
+  assert.equal(r.tier, 'known');
+  assert.equal(r.entry.honey, 2);
+  assert.equal(r.entry.credit, 'H. Dudeney (1917)');
+  assert.match(readFileSync(`trophies/${r.entry.seq}.svg`, 'utf8'), /H. Dudeney \(1917\) · found by @scout/);
 });

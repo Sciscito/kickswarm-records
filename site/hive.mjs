@@ -1,0 +1,412 @@
+// The Hive page: one dashboard for two engines.
+// - Local mode: the page is served by `npm run hive` on this computer; it steers the Node hive (every
+//   core, local models, API keys, subscriptions' CLIs, scheduled nights).
+// - Browser mode: anywhere else (phone included); the hive runs in this tab with Web Workers, and calls
+//   AI models with keys kept on this device only. No prompt to paste.
+
+import { better, shortScore, toUnits } from './lib/exact.mjs';
+import { callModel, listModels, PROVIDERS, sourceFor } from './lib/llm.mjs';
+import { pickMission } from './lib/mission.mjs';
+import { fromPreset, inWindow, PRESETS, ruleCommand } from './lib/presets.mjs';
+import { extractSearcher, searcherPrompt } from './lib/searchgen.mjs';
+import { agentSetupPrompt } from './lib/agentprompt.mjs';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const TIER_LABEL = { cpu: 'Processor', local: 'On this machine', free: 'Free tiers', paid: 'Paid APIs', sub: 'Subscriptions' };
+const today = () => new Date().toISOString().slice(0, 10);
+
+// ---------------------------------------------------------------------------------------------
+// Local backend: talks to `npm run hive` on this computer.
+function localBackend(token) {
+  const api = async (path, body) => {
+    const r = await fetch(`/api/${path}`, body === undefined ? { headers: { 'x-hive-token': token } } : { method: 'POST', headers: { 'x-hive-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+    return j;
+  };
+  return {
+    mode: 'local',
+    state: () => api('state'),
+    preset: (name) => api('preset', { name }),
+    settings: (settings) => api('settings', { settings }),
+    key: (provider, key) => api('keys', { provider, key }),
+    refresh: () => api('inventory', {}),
+    start: () => api('start', {}),
+    stop: (now) => api('stop', { now }),
+    schedule: (install) => api('schedule', { install }),
+    command: (text) => api('command', { text }),
+    events(on) {
+      const es = new EventSource(`/api/events?t=${token}`);
+      for (const ev of ['log', 'state', 'improve', 'stats']) es.addEventListener(ev, (e) => on(ev, JSON.parse(e.data)));
+      return () => es.close();
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Browser backend: the hive runs in this tab.
+function browserBackend(DATA) {
+  const cores = Math.max(1, navigator.hardwareConcurrency || 2);
+  let settings = store.get('ks-hive-settings', null) ?? { ...fromPreset('balanced', cores), workers: Math.max(1, Math.min(4, cores - 1)) };
+  let keys = store.get('ks-hive-keys', {});
+  let sources = [];
+  const stats = store.get('ks-hive-stats', {});
+  const usage = store.get('ks-hive-usage', {});
+  const improvements = store.get('ks-hive-improvements', []);
+  const library = store.get('ks-hive-library', []);
+  const listeners = new Set();
+  const emit = (ev, d) => listeners.forEach((f) => f(ev, d));
+  const active = new Map();
+  const workers = new Set();
+  let running = false;
+  let stopping = false;
+  let wake = null;
+  const log = (msg, slot = null) => emit('log', { t: new Date().toISOString(), slot, msg });
+  const save = () => { store.set('ks-hive-settings', settings); store.set('ks-hive-stats', stats); store.set('ks-hive-usage', usage); store.set('ks-hive-improvements', improvements.slice(-100)); store.set('ks-hive-library', library.slice(-40)); };
+  const snapshot = () => ({ running, stopping, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
+
+  async function discover() {
+    const out = [];
+    for (const [id, key] of Object.entries(keys)) {
+      if (!key || !PROVIDERS[id]) continue;
+      try {
+        const models = await listModels(id, key);
+        if (models[0]) out.push({ ...sourceFor(id, key, models[0]), models: models.slice(0, 15), masked: `…${key.slice(-4)}` });
+      } catch (e) { log(`${PROVIDERS[id].label}: ${e.message}`); }
+    }
+    sources = out;
+  }
+  const publicState = () => ({
+    settings, presets: PRESETS, providers: PROVIDERS, cores,
+    inventory: {
+      machine: { cores, memoryGb: navigator.deviceMemory ?? null, platform: navigator.userAgentData?.platform ?? navigator.platform, browser: true },
+      sources: sources.map(({ key, tier, kind, label, model, models, masked }) => ({ key, tier, kind, label, model, models, masked })),
+      missing: Object.entries(PROVIDERS).filter(([id]) => !keys[id]).map(([id, p]) => ({ key: id, label: p.label, how: `${p.note}. Get a key at ${p.keyUrl}.` })),
+      tools: [],
+    },
+    hive: snapshot(),
+  });
+  const allowed = (s) => settings.tiers?.[s.tier] !== false && !(settings.disabled ?? []).includes(s.key);
+  const quotaLeft = (s) => ((usage[today()] ??= {})[s.key] ?? 0) < (settings.quotas?.[s.tier] ?? 0);
+  function pickSource() {
+    for (const tier of ['local', 'free', 'paid', 'sub']) {
+      const ok = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3);
+      if (ok.length) return ok[0];
+    }
+    for (const s of sources) if (stats[s.key]) stats[s.key].streak = 0;
+    return null;
+  }
+  const note = (key, f) => { const st = (stats[key] ??= { calls: 0, valid: 0, improved: 0, streak: 0 }); if (f === 'fail') st.streak++; else { st[f]++; if (f !== 'calls') st.streak = 0; } };
+  const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : 'circles'}.mjs`, location.href).href;
+
+  /** Run a searcher in a module Web Worker: no page, no storage, no keys; stopped after its time. */
+  function runInWorker(code, url, input) {
+    return new Promise((done) => {
+      const modUrl = code ? URL.createObjectURL(new Blob([code], { type: 'text/javascript' })) : url;
+      const wrapper = `import { search } from ${JSON.stringify(modUrl)};
+self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessage({ best: s })); } catch (err) { self.postMessage({ error: String(err && err.message || err) }); } self.postMessage({ done: true }); };`;
+      const wUrl = URL.createObjectURL(new Blob([wrapper], { type: 'text/javascript' }));
+      const w = new Worker(wUrl, { type: 'module' });
+      workers.add(w);
+      let best = null;
+      let error = null;
+      const end = () => { clearTimeout(t); w.terminate(); workers.delete(w); URL.revokeObjectURL(wUrl); if (code) URL.revokeObjectURL(modUrl); done({ sol: best, err: error }); };
+      const t = setTimeout(end, (input.seconds + 3) * 1000);
+      w.onmessage = (e) => { if (e.data.best) best = e.data.best; if (e.data.error) error = e.data.error; if (e.data.done) end(); };
+      w.onerror = (e) => { error = e.message || 'the searcher crashed'; end(); };
+      w.postMessage(input);
+    });
+  }
+
+  async function slot(i, round, data) {
+    const only = settings.problems?.length ? settings.problems : null;
+    const m = pickMission(data, Math.random, only ? only[Math.floor(Math.random() * only.length)] : undefined);
+    if (!m) return;
+    const p = m.problem;
+    const cur = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    let prog = { url: builtinUrl(p.id), source: 'cpu:builtin' };
+    if (sources.some(allowed) && (round + i) % 2 === 1) {
+      const src = pickSource();
+      if (src) {
+        active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label });
+        emit('state', snapshot());
+        try {
+          const parent = library.filter((x) => x.problem === p.id).sort((a, b) => b.wins - a.wins)[0];
+          const parentCode = parent?.code ?? (await fetch(builtinUrl(p.id)).then((r) => r.text()));
+          note(src.key, 'calls');
+          (usage[today()] ??= {})[src.key] = (usage[today()][src.key] ?? 0) + 1;
+          const code = extractSearcher(await callModel(src, searcherPrompt(m, parentCode, parent ? `from your library: ${parent.wins} record(s), by ${parent.source}` : 'the built-in searcher'), { browser: true }));
+          if (!code) throw new Error('no usable searcher in the answer');
+          prog = { code, source: src.key, entry: { id: Date.now().toString(36), problem: p.id, code, source: src.key, wins: 0, valid: 0 } };
+          log(`${src.label} wrote a searcher`, i);
+        } catch (e) { note(src.key, 'fail'); log(`${src.label}: ${e.message.slice(0, 140)}`, i); }
+      }
+    }
+    if (prog.source === 'cpu:builtin') {
+      const won = library.filter((x) => x.problem === p.id && x.wins > 0);
+      if (won.length && Math.random() < 0.5) { const e = won[Math.floor(Math.random() * won.length)]; prog = { code: e.code, source: e.source, entry: e }; }
+    }
+    const seconds = settings.seconds ?? 120;
+    active.set(i, { phase: 'searching', problem: p.id, case: m.cas.id, source: prog.source, until: Date.now() + seconds * 1000 });
+    emit('state', snapshot());
+    log(`${p.title} n=${m.cas.n} · ${prog.source} · best ${cur ? shortScore(cur.score) : 'none'}`, i);
+    const { sol, err } = await runInWorker(prog.code, prog.url, { problem: p.id, n: m.cas.n, start: cur?.solution ?? null, seconds, seed: Math.floor(Math.random() * 2 ** 31) });
+    active.delete(i);
+    if (!sol) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`no improvement found${err ? `: ${err.slice(0, 120)}` : ''}`, i); }
+    const { judge } = await import(`./problems/${p.id}/judge.mjs`);
+    let s;
+    try { ({ score: s } = judge(m.cas, sol)); } catch (e) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`rejected by the judge: ${e.message}`, i); }
+    if (prog.source !== 'cpu:builtin') note(prog.source, 'valid');
+    if (prog.entry) prog.entry.valid++;
+    const fresh = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => cur);
+    const min = p.score_name === 'radius' ? '0.000000000001' : '1';
+    if (fresh && !(better(s, fresh.score, p.direction) && toUnits(s) - toUnits(fresh.score) >= toUnits(min))) return log(`valid, ${shortScore(s)}: does not beat ${shortScore(fresh.score)}`, i);
+    if (prog.source !== 'cpu:builtin') note(prog.source, 'improved');
+    if (prog.entry) { prog.entry.wins++; if (!library.includes(prog.entry)) library.push(prog.entry); }
+    const model = prog.source.startsWith('cpu') ? 'browser (built-in searcher)' : prog.source.replace(/^[a-z]+:/, '');
+    const sub = { problem: p.id, case: m.cas.id, ...sol, strategy: m.strategyIndex, method: `Browser hive: ${prog.source === 'cpu:builtin' ? 'built-in searcher' : `searcher written by ${prog.source}`}, ${seconds}s from the current best.`, model };
+    const imp = { t: new Date().toISOString(), problem: p.id, title: p.title, case: m.cas.id, score: s, previous: fresh?.score ?? null, source: prog.source, status: 'ready to submit', sub };
+    improvements.push(imp);
+    emit('improve', imp);
+    log(`🐝 improves ${p.title} n=${m.cas.n}: ${shortScore(s)} > ${fresh ? shortScore(fresh.score) : 'none'}`, i);
+  }
+
+  async function run() {
+    running = true;
+    stopping = false;
+    try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+    emit('state', snapshot());
+    try {
+      for (let round = 0; !stopping; round++) {
+        if (!inWindow(settings.schedule)) { emit('state', snapshot()); await new Promise((r) => setTimeout(r, 30000)); continue; }
+        const data = await fetch('data.json', { cache: 'no-store' }).then((r) => r.json()).catch(() => DATA);
+        await Promise.all(Array.from({ length: Math.max(1, settings.workers) }, (_, i) => slot(i, round, data).catch((e) => log(`error: ${e.message}`, i))));
+        save();
+        emit('stats', snapshot());
+      }
+    } finally {
+      running = false;
+      stopping = false;
+      active.clear();
+      try { await wake?.release(); } catch {}
+      save();
+      emit('state', snapshot());
+      log('Hive stopped.');
+    }
+  }
+
+  return {
+    mode: 'browser',
+    async state() { if (!sources.length && Object.keys(keys).length) await discover(); return publicState(); },
+    async preset(name) { settings = { ...fromPreset(name, cores), workers: Math.max(1, Math.min(cores - 1 || 1, Math.round(cores * PRESETS[name].cores))), disabled: settings.disabled, problems: settings.problems }; save(); return publicState(); },
+    async settings(s) { settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) } }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); save(); return publicState(); },
+    async key(provider, key) {
+      if (key) await listModels(provider, key).catch((e) => { throw new Error(`the key did not work: ${e.message}`); });
+      keys = { ...keys, [provider]: key || undefined };
+      if (!key) delete keys[provider];
+      store.set('ks-hive-keys', keys);
+      await discover();
+      return publicState();
+    },
+    async refresh() { await discover(); return publicState(); },
+    async start() { if (!running) run(); return publicState(); },
+    async stop(now) { stopping = true; if (now) workers.forEach((w) => w.terminate()); emit('state', snapshot()); return publicState(); },
+    async schedule() { throw new Error('Scheduled nights need the hive on a computer (npm run hive). In the browser, the hive runs while this tab is open.'); },
+    async command(text) {
+      const src = sources.find(allowed);
+      if (src) {
+        try {
+          const out = await callModel(src, `You configure a personal hive. Current settings: ${JSON.stringify(settings)}. Fields: workers (1..${cores}), seconds (20..3600), tiers {local,free,paid,sub: bool}, quotas {...: calls/day}, schedule {enabled, from "HH:MM", to "HH:MM"}, problems (subset of ["circles-in-square","circles-in-circle","no-three-in-line"]). The person said: ${JSON.stringify(text)}. Reply ONLY with JSON {"patch": {fields to change}, "explain": "one short sentence in their language"}.`, { browser: true, timeoutMs: 60000 });
+          const j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
+          return { patch: j.patch, explain: j.explain, by: src.label };
+        } catch {}
+      }
+      const patch = ruleCommand(text, cores);
+      return patch ? { patch, explain: `Preset: ${patch.preset}`, by: 'built-in rules' } : { patch: null, explain: 'Not understood. Try "free only", "discreet", "full power", or add a model for free-form commands.' };
+    },
+    events(on) { listeners.add(on); return () => listeners.delete(on); },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The page.
+export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
+  const token = new URLSearchParams(location.search).get('t') ?? sessionStorage.getItem('ks-hive-token');
+  let local = false;
+  try { local = !!token && (await fetch('/api/hello', { signal: AbortSignal.timeout(1500) }).then((r) => r.json())).local; } catch {}
+  if (token) sessionStorage.setItem('ks-hive-token', token);
+  const be = local ? localBackend(token) : browserBackend(DATA);
+  let st;
+  try { st = await be.state(); } catch (e) { app.innerHTML = `<h1>Your hive</h1><p class="verdict bad">${esc(e.message)}</p>`; return; }
+  const logLines = [];
+
+  const render = () => {
+    const s = st.settings;
+    const inv = st.inventory;
+    const h = st.hive;
+    const srcByTier = (t) => inv.sources.filter((x) => x.tier === t);
+    const on = (src) => s.tiers?.[src.tier] !== false && !(s.disabled ?? []).includes(src.key);
+    app.innerHTML = `
+    <div class="hive-head">
+      <div>
+        <p class="crumbs"><a href="#/">Hunts</a> / Your hive</p>
+        <h1>Your hive</h1>
+        ${!local ? `<p class="hint">${window.__ksInstall ? '<button class="btn small" id="installapp">📲 Install the app</button>' : /iphone|ipad/i.test(navigator.userAgent) ? '📲 To install: Share, then “Add to Home Screen”.' : '📲 Install it from your browser menu (“Install app” or “Add to Home screen”).'}</p>` : ''}
+        <p class="mode">${local ? '🖥️ Local hive on this computer: every core, your models, keys and subscriptions.' : '📱 Browser hive on this device: runs in this tab. For the full power of a computer, see "On a computer" below.'}</p>
+      </div>
+      <button class="go ${h.running ? 'on' : ''}" id="go" aria-pressed="${h.running}"><span class="bee">🐝</span><b>${h.running ? (h.stopping ? 'Stopping…' : h.waiting ? 'Waiting for its hours' : 'Hunting') : 'Start'}</b><small>${h.running ? 'tap to stop' : `${s.workers} worker${s.workers > 1 ? 's' : ''} · ${esc(PRESETS[s.preset]?.label ?? 'custom')}`}</small></button>
+    </div>
+
+    <div class="voice">
+      <button class="btn" id="mic" title="Speak">🎙️</button>
+      <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
+      <button class="btn" id="cmdgo">Go</button>
+    </div>
+    <div id="proposal"></div>
+
+    <h2>Presets</h2>
+    <div class="presets">${Object.entries(st.presets).map(([k, p]) => `<button class="preset ${s.preset === k ? 'sel' : ''}" data-preset="${k}"><span>${p.emoji}</span><b>${esc(p.label)}</b><small>${esc(p.blurb)}</small></button>`).join('')}</div>
+
+    <div class="two" style="margin-top:28px">
+      <section class="panel">
+        <h3>What you give</h3>
+        <div class="src on"><span>🧠</span><div><b>${TIER_LABEL.cpu}</b><small>${esc(inv.machine.cores)} cores${inv.machine.cpu ? ` · ${esc(inv.machine.cpu)}` : ''}${inv.machine.memoryGb ? ` · ${esc(inv.machine.memoryGb)} GB` : ''}${inv.machine.gpu?.length ? ` · GPU ${esc(inv.machine.gpu.join(', '))}` : ''}</small></div>
+          <label class="num">workers <input type="range" min="1" max="${st.cores}" value="${s.workers}" id="workers"><output>${s.workers}</output></label></div>
+        ${['local', 'free', 'paid', 'sub'].map((t) => `
+          <div class="tier"><label class="switch"><input type="checkbox" data-tier="${t}" ${s.tiers?.[t] !== false ? 'checked' : ''}><span></span></label><b>${TIER_LABEL[t]}</b><small>${s.quotas?.[t] ?? 0} calls/day per source</small></div>
+          ${srcByTier(t).map((x) => `<div class="src ${on(x) ? 'on' : ''}"><label class="switch"><input type="checkbox" data-src="${esc(x.key)}" ${!(s.disabled ?? []).includes(x.key) ? 'checked' : ''}><span></span></label><div><b>${esc(x.label)}</b><small>${h.usage?.[x.key] ?? 0} calls today${x.masked ? ` · key ${esc(x.masked)}` : ''}${h.stats?.[x.key] ? ` · ${h.stats[x.key].improved} record(s) from ${h.stats[x.key].calls} call(s)` : ''}</small></div>${x.masked ? `<button class="btn small" data-forget="${esc(x.key.split(':')[0])}">Forget key</button>` : ''}</div>`).join('')}`).join('')}
+        <details class="add"><summary>Add a source</summary>
+          <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider. ${local ? '' : 'They are never given to the search programs.'}</p>
+          ${Object.entries(st.providers).map(([id, p]) => inv.sources.some((x) => x.key.startsWith(`${id}:`)) ? '' : `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`).join('')}
+          ${local ? (inv.missing ?? []).filter((m) => m.key.startsWith('cli:') || m.key === 'ollama').map((m) => `<div class="addrow"><b>${esc(m.label)}</b><small>${esc(m.how)}</small></div>`).join('') : '<div class="addrow"><b>Local models and subscriptions</b><small>Ollama, Claude Code, Codex and Gemini CLI work with the hive on a computer (npm run hive).</small></div>'}
+        </details>
+        ${local && inv.tools?.length ? `<p class="hint">Tools your agents already have (MCP): ${inv.tools.map((t) => esc(t.name)).join(', ')}. The hive does not use them for searching; the setup prompt below may.</p>` : ''}
+      </section>
+
+      <section class="panel">
+        <h3>Rules</h3>
+        <label class="row">Minutes per search <input type="number" min="1" max="60" value="${Math.round((s.seconds ?? 120) / 60) || 1}" id="minutes"></label>
+        ${['local', 'free', 'paid', 'sub'].map((t) => `<label class="row">${TIER_LABEL[t]}: calls per day <input type="number" min="0" max="100000" value="${s.quotas?.[t] ?? 0}" data-quota="${t}"></label>`).join('')}
+        <div class="row"><label class="switch"><input type="checkbox" id="sched" ${s.schedule?.enabled ? 'checked' : ''}><span></span></label> Only between <input type="time" id="from" value="${esc(s.schedule?.from ?? '23:00')}"> and <input type="time" id="to" value="${esc(s.schedule?.to ?? '07:00')}"></div>
+        ${local ? `<div class="row">${st.schedule?.installed ? '✅ Runs every night on this computer, even with this page closed. <button class="btn small" id="unsched">Remove</button>' : '<button class="btn small" id="install">Run every night on this computer</button><small class="hint">Creates a scheduled task (Windows Task Scheduler or cron) at the start time above. You can remove it here.</small>'}</div>` : ''}
+        ${local ? `<div class="row"><label class="switch"><input type="checkbox" id="autosub" ${s.submit !== 'none' ? 'checked' : ''}><span></span></label> Publish improvements automatically on GitHub (with your GitHub CLI login). Off: they wait in hunts/outbox.</div>` : '<div class="row hint">In the browser, each improvement waits for your click on Submit.</div>'}
+        <div class="row hunts">Hunts: ${DATA.problems.map((p) => `<label><input type="checkbox" data-problem="${p.id}" ${!s.problems?.length || s.problems.includes(p.id) ? 'checked' : ''}> ${esc(p.title)}</label>`).join('')}</div>
+      </section>
+    </div>
+
+    <div class="two" style="margin-top:24px">
+      <section class="panel">
+        <h3>Right now</h3>
+        <div class="slots">${h.active?.length ? h.active.map((a) => `<div class="slotcard"><b>#${a.slot + 1}</b> ${a.phase === 'writing' ? `✍️ ${esc(a.source)} writes a searcher` : `🔎 ${esc(DATA.problems.find((p) => p.id === a.problem)?.title)} n=${esc(a.case)}`}${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div>` : ''}</div>`).join('') : `<p class="empty">${h.running ? 'Starting…' : 'Idle. Press Start.'}</p>`}</div>
+        <ul class="feed hivelog" id="log">${logLines.slice(0, 40).map((l) => `<li><time>${l.t.slice(11, 19)}</time> ${l.slot === null ? '' : `<b>#${l.slot + 1}</b> `}${esc(l.msg)}</li>`).join('')}</ul>
+      </section>
+      <section class="panel">
+        <h3>Your improvements</h3>
+        ${h.improvements?.length ? `<ul class="feed">${h.improvements.map((x, k) => `<li><span>🐝 <b>${esc(x.title)} n=${esc(x.case)}</b> ${esc(shortScore(x.score))}${x.previous ? ` <small>(was ${esc(shortScore(x.previous))})</small>` : ''}<br><small>${esc(x.source)} · ${esc(x.status)}</small></span>${x.sub ? `<button class="btn small" data-submit="${k}">Submit</button>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet. Records found by your hive land here.</p>'}
+      </section>
+    </div>
+
+    <details class="panel" style="margin-top:24px" ${local ? '' : 'open'}><summary><b>On a computer: let your agent set everything up</b></summary>
+      <p class="hint">Paste this once into Claude Code, Codex or Gemini CLI. It installs the hive, shows you what it found, asks before every connection, and schedules nights only if you say yes.</p>
+      <div class="cta-row"><button class="btn primary" id="copyagent">Copy the setup prompt</button></div>
+      <pre class="prompt">${esc(agentSetupPrompt())}</pre>
+    </details>`;
+    wire();
+  };
+
+  const apply = async (fn) => { try { st = await fn(); render(); } catch (e) { toast(e.message); } };
+  const patch = (p) => apply(() => be.settings({ ...p }));
+  function wire() {
+    const $ = (q) => app.querySelector(q);
+    $('#go').onclick = async () => {
+      if (st.hive.running) return apply(() => be.stop(false));
+      if (local && st.settings.submit !== 'none' && !store.get('ks-consent-submit', false)) {
+        const ok = confirm('When your hive beats a record, it will publish the solution on GitHub under your account (public, permanent, credited to you). OK? Cancel = keep improvements on this computer only.');
+        store.set('ks-consent-submit', true);
+        if (!ok) st = await be.settings({ submit: 'none' });
+      }
+      apply(() => be.start());
+    };
+    $('#autosub')?.addEventListener('change', (e) => patch({ submit: e.target.checked ? 'improvements' : 'none' }));
+    app.querySelectorAll('[data-preset]').forEach((b) => (b.onclick = () => apply(() => be.preset(b.dataset.preset))));
+    const w = $('#workers');
+    w.oninput = () => (w.nextElementSibling.textContent = w.value);
+    w.onchange = () => patch({ workers: Number(w.value), preset: 'custom' });
+    app.querySelectorAll('[data-tier]').forEach((c) => (c.onchange = () => patch({ tiers: { ...st.settings.tiers, [c.dataset.tier]: c.checked }, preset: 'custom' })));
+    app.querySelectorAll('[data-src]').forEach((c) => (c.onchange = () => {
+      const d = new Set(st.settings.disabled ?? []);
+      c.checked ? d.delete(c.dataset.src) : d.add(c.dataset.src);
+      patch({ disabled: [...d] });
+    }));
+    app.querySelectorAll('[data-quota]').forEach((c) => (c.onchange = () => patch({ quotas: { ...st.settings.quotas, [c.dataset.quota]: Number(c.value) }, preset: 'custom' })));
+    $('#minutes').onchange = (e) => patch({ seconds: Math.max(1, Number(e.target.value)) * 60 });
+    const sched = () => patch({ schedule: { enabled: $('#sched').checked, from: $('#from').value, to: $('#to').value } });
+    $('#sched').onchange = sched;
+    $('#from').onchange = sched;
+    $('#to').onchange = sched;
+    app.querySelectorAll('[data-problem]').forEach((c) => (c.onchange = () => patch({ problems: [...app.querySelectorAll('[data-problem]:checked')].map((x) => x.dataset.problem) })));
+    app.querySelectorAll('[data-savekey]').forEach((b) => (b.onclick = async () => {
+      const id = b.dataset.savekey;
+      const v = app.querySelector(`[data-keyfor="${id}"]`).value.trim();
+      if (!v) return;
+      b.disabled = true;
+      b.textContent = 'Checking…';
+      await apply(() => be.key(id, v));
+      toast(`${st.providers[id].label} connected`);
+    }));
+    app.querySelectorAll('[data-forget]').forEach((b) => (b.onclick = () => apply(() => be.key(b.dataset.forget, ''))));
+    $('#install')?.addEventListener('click', async () => {
+      if (!confirm(`Create a scheduled task that starts the hive every day at ${st.settings.schedule.from}? You can remove it here at any time.`)) return;
+      try { const r = await be.schedule(true); st = r; render(); toast(r.message); } catch (e) { toast(e.message); }
+    });
+    $('#unsched')?.addEventListener('click', async () => { try { const r = await be.schedule(false); st = r; render(); toast(r.message); } catch (e) { toast(e.message); } });
+    app.querySelectorAll('[data-submit]').forEach((b) => (b.onclick = () => submitUrl(st.hive.improvements[Number(b.dataset.submit)].sub)));
+    $('#installapp')?.addEventListener('click', async () => { await window.__ksInstall.prompt(); window.__ksInstall = null; render(); });
+    $('#copyagent').onclick = () => copy(agentSetupPrompt(), 'Setup prompt copied: paste it into your agent');
+    // Commands, typed or spoken.
+    const run = async (text) => {
+      if (!text.trim()) return;
+      $('#proposal').innerHTML = '<p class="hint">Thinking…</p>';
+      try {
+        const r = await be.command(text);
+        if (!r.patch) { $('#proposal').innerHTML = `<p class="verdict bad">${esc(r.explain)}</p>`; return; }
+        $('#proposal').innerHTML = `<div class="verdict ok"><b>${esc(r.explain || 'Proposed change')}</b><br><small>by ${esc(r.by)}</small><pre class="prompt">${esc(JSON.stringify(r.patch, null, 1))}</pre><div class="cta-row"><button class="btn primary" id="applyp">Apply</button><button class="btn" id="cancelp">Cancel</button></div></div>`;
+        $('#applyp').onclick = () => { patch({ ...r.patch, preset: r.patch.preset ?? 'custom' }); };
+        $('#cancelp').onclick = () => ($('#proposal').innerHTML = '');
+      } catch (e) { $('#proposal').innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`; }
+    };
+    $('#cmdgo').onclick = () => run($('#cmd').value);
+    $('#cmd').onkeydown = (e) => e.key === 'Enter' && run($('#cmd').value);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) $('#mic').style.display = 'none';
+    else $('#mic').onclick = () => {
+      const r = new SR();
+      r.lang = navigator.language || 'en-US';
+      r.interimResults = false;
+      $('#mic').textContent = '⏺️';
+      r.onresult = (e) => { const t = e.results[0][0].transcript; $('#cmd').value = t; run(t); };
+      r.onend = () => ($('#mic').textContent = '🎙️');
+      r.start();
+    };
+  }
+
+  render();
+  const off = be.events((ev, d) => {
+    if (!document.body.contains(app) || !location.hash.startsWith('#/hive')) { off(); return; }
+    if (ev === 'log') {
+      logLines.unshift(d);
+      logLines.length = Math.min(logLines.length, 200);
+      const ul = app.querySelector('#log');
+      if (ul) ul.insertAdjacentHTML('afterbegin', `<li><time>${d.t.slice(11, 19)}</time> ${d.slot === null ? '' : `<b>#${d.slot + 1}</b> `}${esc(d.msg)}</li>`);
+      return;
+    }
+    if (ev === 'improve') toast(`🐝 New record: ${d.title} n=${d.case}`);
+    st = { ...st, hive: { ...st.hive, ...(ev === 'improve' ? {} : d) } };
+    if (ev === 'improve') be.state().then((x) => { st = x; render(); });
+    else if (!app.contains(document.activeElement) || document.activeElement === document.body || document.activeElement.id === 'go') render();
+  });
+}

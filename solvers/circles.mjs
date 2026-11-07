@@ -1,8 +1,9 @@
 // Built-in searcher for circles-in-square and circles-in-circle: perturb a few circles of the current
 // best, then "inflate" all circles as soft disks and push overlaps apart (a Lubachevsky-Stillinger-like
 // relaxation). Keeps any configuration whose true radius is larger. See README.md for the contract.
+// Plain JavaScript, no imports: it runs in Node (solvers/run.mjs) and in a browser Web Worker.
 
-const input = JSON.parse(await new Promise((r) => { let s = ''; process.stdin.on('data', (d) => (s += d)); process.stdin.on('end', () => r(s)); }));
+export async function search(input, report) {
 const { problem, n, start, seconds } = input;
 const disc = problem === 'circles-in-circle';
 const deadline = Date.now() + (seconds - 2) * 1000;
@@ -85,7 +86,7 @@ if (start?.centers?.length === n) {
 }
 let bestR = radius(X, Y);
 const fmt = (v) => v.toFixed(20).replace(/0+$/, '').replace(/\.$/, '.0');
-const emit = () => console.log('BEST ' + JSON.stringify({ centers: X.map((x, i) => [fmt(x), fmt(Y[i])]) }));
+const emit = () => report({ centers: X.map((x, i) => [fmt(x), fmt(Y[i])]) });
 if (!start) emit();
 
 while (Date.now() < deadline) {
@@ -109,4 +110,5 @@ while (Date.now() < deadline) {
     X = X2; Y = Y2; bestR = r;
     emit();
   }
+}
 }

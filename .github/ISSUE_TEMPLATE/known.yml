@@ -1,0 +1,17 @@
+name: A better solution exists elsewhere
+description: Show a solution published somewhere else that beats the board. It is judged, credited to its real authors, and becomes the one to beat.
+title: "[solution] known elsewhere: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you, scout. Paste the solution as JSON, with a `credit` field naming its real authors and where it was published:
+        `{"problem": "...", "case": "...", "centers" or "points": [...], "credit": "A. Author (2026), https://..."}`
+        The robot judges it like any other. If it beats the board, it is recorded as **Known elsewhere**, credited to its authors; you get +2 honey for the find.
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution
+      render: json
+    validations:
+      required: true

@@ -9,10 +9,10 @@ const OUT = '_site';
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(OUT);
 cpSync('site', OUT, { recursive: true });
-for (const d of ['lib', 'problems', 'records', 'trophies']) if (existsSync(d)) cpSync(d, `${OUT}/${d}`, { recursive: true });
+for (const d of ['lib', 'problems', 'records', 'trophies', 'solvers']) if (existsSync(d)) cpSync(d, `${OUT}/${d}`, { recursive: true });
 for (const f of ['registry.jsonl']) if (existsSync(f)) cpSync(f, `${OUT}/${f}`);
-rmSync(`${OUT}/lib/process.mjs`);
-rmSync(`${OUT}/lib/registry.mjs`);
+for (const f of ['process', 'registry', 'providers', 'hive', 'settings']) rmSync(`${OUT}/lib/${f}.mjs`, { force: true });
+rmSync(`${OUT}/solvers/run.mjs`, { force: true });
 
 const reg = readRegistry();
 const problems = PROBLEMS.map(loadProblem);
@@ -22,7 +22,7 @@ for (const p of problems) {
   for (const c of p.cases) {
     const rec = readRecord(p.id, c.id);
     cases[`${p.id}/${c.id}`] = rec
-      ? { score: rec.score, author: rec.author, tier: rec.tier ?? (rec.reference ? 'reference' : 'valid'), seq: rec.seq, date: rec.date, attempts: 0, records: 0, methods: {} }
+      ? { score: rec.score, author: rec.author, credit: rec.credit, tier: rec.tier ?? (rec.reference ? 'reference' : 'valid'), seq: rec.seq, date: rec.date, attempts: 0, records: 0, methods: {} }
       : { attempts: 0, records: 0, methods: {} };
   }
 }

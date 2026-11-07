@@ -30,11 +30,20 @@ repair and formal proofs.
 
 ## The personal hive: use 100% of what you have
 
+**On a phone or any browser:** open the site, tap **Your hive**, pick a preset, press Start. Add a free AI
+key (Gemini, Groq, OpenRouter…) and the page writes and runs search programs by itself: no prompt to
+paste. Install it on your home screen like an app.
+
+**On a computer**, for everything the machine has:
+
 ```
 git clone https://github.com/Sciscito/kickswarm-records && cd kickswarm-records
-npm run hunt -- --inventory   # what this machine can use
-npm run hunt                  # hunt until Ctrl+C
+npm run hive                  # the dashboard: inventory, presets, sources, quotas, schedule, voice
+npm run hunt                  # or the same hive in the terminal, until Ctrl+C
 ```
+
+Or let your coding agent do the setup: the Hive page has a setup prompt for Claude Code, Codex or Gemini
+CLI that asks before every connection and schedules nights only if you say yes.
 
 The hive puts every resource you have to work, **within each service's own rules**:
 

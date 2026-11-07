@@ -1,10 +1,15 @@
-name: Judge a submission
+name: Judge submissions
 
-# Runs when someone opens an issue with the solution form. The judge code always comes from the main
-# branch; the submission is only data. One submission at a time, so the registry chain never forks.
+# Each run handles every open "[solution]" issue not yet judged, oldest first. GitHub keeps only one
+# queued run per concurrency group and cancels the others during a burst; the sweep (and the schedule
+# below) makes sure no submission is ever lost. The judge code always comes from the main branch; a
+# submission is only data.
 on:
   issues:
     types: [opened]
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 concurrency:
   group: registry
@@ -18,11 +23,11 @@ permissions:
 
 jobs:
   judge:
-    if: startsWith(github.event.issue.title, '[solution]')
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[solution]')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     outputs:
-      status: ${{ steps.robot.outputs.status }}
+      changed: ${{ steps.robot.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,28 +38,25 @@ jobs:
       - id: robot
         run: node scripts/robot.mjs
         env:
-          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          GH_TOKEN: ${{ github.token }}
       - name: Save the registry
-        if: steps.robot.outputs.status != 'rejected'
+        if: steps.robot.outputs.changed == 'true'
         run: |
           git config user.name "kickswarm-records[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add registry.jsonl records solutions trophies
-          git commit -m "Registry: issue #${{ github.event.issue.number }} (${{ steps.robot.outputs.status }})"
+          git commit -m "Registry: ${{ steps.robot.outputs.count }} submission(s)"
           git pull --rebase origin main
           git push origin HEAD:main
       - name: Reply and close
+        if: steps.robot.outputs.count != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh label create "${{ steps.robot.outputs.label }}" --repo "${{ github.repository }}" --force >/dev/null 2>&1 || true
-          gh issue comment ${{ github.event.issue.number }} --repo "${{ github.repository }}" --body-file reply.md
-          gh issue edit ${{ github.event.issue.number }} --repo "${{ github.repository }}" --add-label "${{ steps.robot.outputs.label }}"
-          gh issue close ${{ github.event.issue.number }} --repo "${{ github.repository }}"
+        run: node scripts/reply.mjs
 
   site:
     needs: judge
-    if: needs.judge.outputs.status != 'rejected'
+    if: needs.judge.outputs.changed == 'true'
     uses: ./.github/workflows/site.yml
     permissions:
       contents: read

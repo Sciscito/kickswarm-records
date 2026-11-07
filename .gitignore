@@ -6,3 +6,6 @@ reply.md
 import.log
 *.local.*
 hunt.config.json
+hive.settings.json
+.env.local
+replies.json
