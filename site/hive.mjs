@@ -68,13 +68,14 @@ function browserBackend(DATA) {
   const listeners = new Set();
   const emit = (ev, d) => listeners.forEach((f) => f(ev, d));
   const active = new Map();
+  let runs = store.get('ks-hive-runs', 0);
   const workers = new Set();
   let running = false;
   let stopping = false;
   let wake = null;
   const log = (msg, slot = null) => emit('log', { t: new Date().toISOString(), slot, msg });
   const save = () => { store.set('ks-hive-settings', settings); store.set('ks-hive-stats', stats); store.set('ks-hive-usage', usage); store.set('ks-hive-improvements', improvements.slice(-100)); store.set('ks-hive-library', library.slice(-40)); };
-  const snapshot = () => ({ running, stopping, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
+  const snapshot = () => ({ running, stopping, runs, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
 
   // An AI model running on this device's graphics chip (WebGPU): no key, no account, free.
   // Downloaded once (about 1 GB) after the person asks for it, then cached by the browser.
@@ -143,7 +144,7 @@ function browserBackend(DATA) {
   const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : pid === 'protein-folding-2d' ? 'protein-folding-2d' : 'circles'}.mjs`, location.href).href;
 
   /** Run a searcher in a module Web Worker: no page, no storage, no keys; stopped after its time. */
-  function runInWorker(code, url, input) {
+  function runInWorker(code, url, input, onBest = () => {}) {
     return new Promise((done) => {
       const modUrl = code ? URL.createObjectURL(new Blob([code], { type: 'text/javascript' })) : url;
       const wrapper = `import { search } from ${JSON.stringify(modUrl)};
@@ -155,7 +156,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
       let error = null;
       const end = () => { clearTimeout(t); w.terminate(); workers.delete(w); URL.revokeObjectURL(wUrl); if (code) URL.revokeObjectURL(modUrl); done({ sol: best, err: error }); };
       const t = setTimeout(end, (input.seconds + 3) * 1000);
-      w.onmessage = (e) => { if (e.data.best) best = e.data.best; if (e.data.error) error = e.data.error; if (e.data.done) end(); };
+      w.onmessage = (e) => { if (e.data.best) { best = e.data.best; onBest(best); } if (e.data.error) error = e.data.error; if (e.data.done) end(); };
       w.onerror = (e) => { error = e.message || 'the searcher crashed'; end(); };
       w.postMessage(input);
     });
@@ -171,7 +172,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     if (sources.some(allowed)) {
       const src = pickSource(new Set([...active.values()].map((a) => a.sourceKey).filter(Boolean)));
       if (src) {
-        active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label, sourceKey: src.key });
+        active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label, sourceKey: src.key, startScore: cur?.score ?? null });
         emit('state', snapshot());
         try {
           const parent = library.filter((x) => x.problem === p.id).sort((a, b) => b.wins - a.wins)[0];
@@ -190,11 +191,18 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
       if (won.length && Math.random() < 0.5) { const e = won[Math.floor(Math.random() * won.length)]; prog = { code: e.code, source: e.source, entry: e }; }
     }
     const seconds = settings.seconds ?? 120;
-    active.set(i, { phase: 'searching', problem: p.id, case: m.cas.id, source: prog.source, until: Date.now() + seconds * 1000 });
+    const { judge: judgeLive } = await import(`./problems/${p.id}/judge.mjs`);
+    active.set(i, { phase: 'searching', problem: p.id, case: m.cas.id, source: prog.source, model: prog.source.replace(/^[a-z]+:/, ''), started: Date.now(), until: Date.now() + seconds * 1000, startScore: cur?.score ?? null, score: null });
     emit('state', snapshot());
     log(`${p.title} n=${m.cas.n} · ${prog.source} · best ${cur ? shortScore(cur.score) : 'none'}`, i);
-    const { sol, err } = await runInWorker(prog.code, prog.url, { problem: p.id, n: m.cas.n, ...(m.cas.sequence ? { sequence: m.cas.sequence } : {}), start: cur?.solution ?? null, seconds, seed: Math.floor(Math.random() * 2 ** 31) });
+    let lastEmit = 0;
+    const onBest = (sol) => {
+      try { const a = active.get(i); if (a) { a.score = judgeLive(m.cas, sol).score; if (Date.now() - lastEmit > 800) { lastEmit = Date.now(); emit('state', snapshot()); } } } catch {}
+    };
+    const { sol, err } = await runInWorker(prog.code, prog.url, { problem: p.id, n: m.cas.n, ...(m.cas.sequence ? { sequence: m.cas.sequence } : {}), start: cur?.solution ?? null, seconds, seed: Math.floor(Math.random() * 2 ** 31) }, onBest);
     active.delete(i);
+    runs++;
+    store.set('ks-hive-runs', runs);
     if (!sol) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`no improvement found${err ? `: ${err.slice(0, 120)}` : ''}`, i); }
     const { judge } = await import(`./problems/${p.id}/judge.mjs`);
     let s;
@@ -280,9 +288,53 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
   };
 }
 
+
+// ---------- the control room: helpers ----------
+let SITE = { problems: [] }; // the site data, set when the page opens
+const SOURCE_KIND = (key = '') => {
+  if (key.startsWith('cpu')) return ['Processor', 'k-cpu'];
+  if (/^(ollama|webllm)/.test(key)) return ['Local model', 'k-local'];
+  if (key.startsWith('cli')) return ['Subscription', 'k-sub'];
+  if (/^(anthropic|openai|deepseek|moonshot|zai)/.test(key)) return ['Paid API', 'k-paid'];
+  if (key.startsWith('echo')) return ['Test', 'k-cpu'];
+  return ['Free model', 'k-free'];
+};
+const shortModel = (m = '') => (m === 'builtin' ? 'Built-in searcher' : m.replace(/^openrouter[:/]/, '').replace(/:free$/, '').split('/').pop().slice(0, 28));
+const initials = (m = '') => shortModel(m).replace(/[^A-Za-z0-9]/g, ' ').trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'AI';
+function joursDeChasse(running) {
+  const d = store.get('ks-hive-days', []);
+  const t = today();
+  if (running && !d.includes(t)) { d.push(t); store.set('ks-hive-days', d.slice(-400)); }
+  let k = 0;
+  for (let day = new Date(); d.includes(day.toISOString().slice(0, 10)); day.setUTCDate(day.getUTCDate() - 1)) k++;
+  return { streak: k, days: d.length };
+}
+function niveau(xp) {
+  const lvl = Math.floor(Math.sqrt(xp / 5));
+  const base = lvl * lvl * 5;
+  const next = (lvl + 1) * (lvl + 1) * 5;
+  return { lvl, pct: Math.round(((xp - base) / (next - base)) * 100), toNext: next - xp };
+}
+function agentCard(a) {
+  const [kind, cls] = SOURCE_KIND(a.phase === 'writing' ? a.sourceKey ?? '' : a.source ?? '');
+  const p = SITE.problems.find((x) => x.id === a.problem);
+  const model = a.phase === 'writing' ? a.source : shortModel(a.model ?? a.source);
+  const better = a.score != null && a.startScore != null && a.score !== a.startScore;
+  const sc = a.phase === 'writing' ? '<span class="aw">writing its search program…</span>'
+    : a.score != null ? `<span class="${better ? 'up' : ''}">${esc(shortScore(a.startScore ?? '—'))} → <b>${esc(shortScore(a.score))}</b>${better ? ' ▲' : ''}</span>`
+    : `<span>best on the board ${esc(a.startScore != null ? shortScore(a.startScore) : 'none yet')}</span>`;
+  return `<div class="agent ph-${a.phase}">
+    <div class="ahead"><span class="aav ${cls}">${esc(initials(model))}</span><div class="aname"><b>${esc(model)}</b><small class="kind ${cls}">${kind}</small></div><span class="aphase">${a.phase === 'writing' ? icon('pen') : icon('search')}</span></div>
+    <div class="atask">${esc(p?.title ?? a.problem)} · ${p?.id === 'protein-folding-2d' ? esc(String(a.case).toUpperCase()) : `n = ${esc(a.case)}`}</div>
+    <div class="ascore">${sc}</div>
+    ${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div><small class="arem" data-until="${a.until}"></small>` : '<div class="bar ind"><i></i></div>'}
+  </div>`;
+}
+
 // ---------------------------------------------------------------------------------------------
 // The page.
 export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
+  SITE = DATA;
   const token = new URLSearchParams(location.search).get('t') ?? sessionStorage.getItem('ks-hive-token');
   let local = false;
   try { local = !!token && (await fetch('/api/hello', { signal: AbortSignal.timeout(1500) }).then((r) => r.json())).local; } catch {}
@@ -317,6 +369,28 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     </div>
 
     <div class="cta-row" style="margin-top:10px"><button class="btn small" id="invite2">${icon('share')} Invite friends</button><a class="btn small" href="#/start">Help me set up</a></div>
+
+    ${(() => {
+      const runs = h.runs ?? 0;
+      const imps = h.improvements?.length ?? 0;
+      const xp = runs + imps * 10;
+      const L = niveau(xp);
+      const J = joursDeChasse(h.running);
+      const n = Math.max(1, s.workers);
+      const cards = (h.active ?? []).map(agentCard);
+      while (cards.length < n) cards.push(`<div class="agent idle"><div class="ahead"><span class="aav">${BEE}</span><div class="aname"><b>${h.running ? 'Getting a mission…' : 'Asleep'}</b><small class="kind">worker ${cards.length + 1}</small></div></div><div class="atask">${h.running ? 'picking a case few people tried' : 'press Start to wake the swarm'}</div></div>`);
+      return `<section class="control">
+        <div class="cbar">
+          <div class="clevel"><span class="lvl mono">LV ${L.lvl}</span><div class="xp"><i style="width:${L.pct}%"></i></div><small>${xp} XP · ${L.toNext} to level ${L.lvl + 1}</small></div>
+          <div class="cstat"><b>${runs}</b><small>searches</small></div>
+          <div class="cstat"><b>${imps}</b><small>records found</small></div>
+          <div class="cstat"><b>${J.streak}</b><small>day streak ${icon('flame')}</small></div>
+          <div class="cstat"><b>${(h.active ?? []).length}/${n}</b><small>agents at work</small></div>
+        </div>
+        ${h.loading ? `<p class="hint">${esc(h.loading)}</p>` : ''}
+        <div class="agents">${cards.join('')}</div>
+      </section>`;
+    })()}
     <div class="voice">
       <button class="btn icon-btn" id="mic" title="Speak" aria-label="Speak a command">${icon('mic')}</button>
       <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
@@ -368,9 +442,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
 
     <div class="two" style="margin-top:24px">
       <section class="panel">
-        <h3>Right now</h3>
-        ${h.loading ? `<p class="hint">${esc(h.loading)}</p>` : ''}
-        <div class="slots">${h.active?.length ? h.active.map((a) => `<div class="slotcard"><b>#${a.slot + 1}</b> ${a.phase === 'writing' ? `${icon('pen')} ${esc(a.source)} writes a searcher` : `${icon('search')} ${esc(DATA.problems.find((p) => p.id === a.problem)?.title)}, n = ${esc(a.case)}`}${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div>` : ''}</div>`).join('') : `<p class="empty">${h.running ? 'Starting…' : 'Idle. Press Start.'}</p>`}</div>
+        <h3>Activity</h3>
         <ul class="feed hivelog" id="log">${logLines.slice(0, 40).map((l) => `<li><time>${l.t.slice(11, 19)}</time> ${l.slot === null ? '' : `<b>#${l.slot + 1}</b> `}${esc(l.msg)}</li>`).join('')}</ul>
       </section>
       <section class="panel">
@@ -379,6 +451,16 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       </section>
     </div>
 
+    ${(() => {
+      const day = new Date(Date.now() - 86400000).toISOString();
+      const recent = DATA.feed.filter((e) => e.ts >= day);
+      const hunters = new Set(recent.map((e) => e.author)).size;
+      return `<section class="panel swarmnow" style="margin-top:24px">
+        <h3>The swarm right now <small class="hint">last 24 hours, everyone</small></h3>
+        <div class="cbar" style="grid-template-columns:repeat(3,1fr)"><div class="cstat"><b>${hunters}</b><small>hunters active</small></div><div class="cstat"><b>${recent.filter((e) => e.nature === 'record').length}</b><small>records</small></div><div class="cstat"><b>${recent.length}</b><small>verified tries</small></div></div>
+        ${recent.length ? `<ul class="feed">${recent.slice(0, 6).map((e) => `<li>${e.nature === 'record' ? `<span class="badge t-${esc(e.tier)}">${esc(e.tier)}</span>` : '<span class="badge t-attempt">try</span>'} <a href="#/u/${esc(e.author)}">@${esc(e.author)}</a> · ${esc(DATA.problems.find((x) => x.id === e.problem)?.title ?? e.problem)} · ${esc(shortScore(e.score))}${e.model ? ` <small class="kind">${esc(shortModel(e.model))}</small>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Quiet for now. Start your hive and be the first today.</p>'}
+      </section>`;
+    })()}
     <details class="panel" style="margin-top:24px" ${local ? '' : 'open'}><summary><b>On a computer: let your agent set everything up</b></summary>
       <p class="hint">Paste this once into Claude Code, Codex or Gemini CLI. It installs the hive, shows you what it found, asks before every connection, and schedules nights only if you say yes.</p>
       <div class="cta-row"><button class="btn primary" id="copyagent">Copy the setup prompt</button><a class="btn" href="#/start">Simple setup, no agent</a></div>
@@ -484,6 +566,10 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   }
 
   render();
+  const tick = setInterval(() => {
+    if (!document.body.contains(app) || !location.hash.startsWith('#/hive')) return clearInterval(tick);
+    app.querySelectorAll('.arem').forEach((el) => { const r = Math.max(0, Math.round((Number(el.dataset.until) - Date.now()) / 1000)); el.textContent = `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')} left`; });
+  }, 1000);
   // Start by itself when the person started it last time (Stop turns this off).
   if (st.settings.autostart && !st.hive.running) apply(() => be.start());
   const off = be.events((ev, d) => {
