@@ -9,6 +9,18 @@
   },
   "hunts": [
     {
+      "title": "Cap sets",
+      "domain": "math",
+      "level": "hardcore",
+      "why": "A famous open problem: the largest set of SET cards with no SET. An AI raised the record in dimension 8 in 2023; dimension 7 has not moved in twenty years. Any improvement is a new theorem-level result.",
+      "verify": "Exact: the judge checks every pair of points and the third point of their line.",
+      "status": "open",
+      "link": "#/p/cap-sets",
+      "difficulty": 5,
+      "impact": 4,
+      "flagship": true
+    },
+    {
       "title": "Protein folding (HP model)",
       "domain": "science",
       "why": "The classic benchmark of protein-folding research: fold a chain so its hydrophobic residues huddle. Small chains have proven optimal folds; the 85- and 100-residue chains may still be beaten.",
@@ -17,7 +29,8 @@
       "link": "#/p/protein-folding-2d",
       "difficulty": 3,
       "impact": 3,
-      "flagship": true
+      "flagship": true,
+      "level": "warm-up"
     },
     {
       "title": "Vehicle routing benchmarks",
@@ -27,7 +40,8 @@
       "status": "next",
       "difficulty": 4,
       "impact": 5,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Job-shop scheduling (Taillard instances)",
@@ -37,7 +51,8 @@
       "status": "next",
       "difficulty": 4,
       "impact": 4,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Exoplanet transits in public telescope data",
@@ -47,7 +62,8 @@
       "status": "next",
       "difficulty": 3,
       "impact": 5,
-      "flagship": true
+      "flagship": true,
+      "level": "classic"
     },
     {
       "title": "Fewer multiplications for matrix products",
@@ -57,7 +73,8 @@
       "status": "next",
       "difficulty": 5,
       "impact": 5,
-      "flagship": true
+      "flagship": true,
+      "level": "hardcore"
     },
     {
       "title": "Sorting networks",
@@ -67,7 +84,8 @@
       "status": "next",
       "difficulty": 4,
       "impact": 4,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Error-correcting codes",
@@ -77,7 +95,8 @@
       "status": "next",
       "difficulty": 4,
       "impact": 4,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Repair open source, with tests",
@@ -87,7 +106,8 @@
       "status": "later",
       "difficulty": 3,
       "impact": 5,
-      "flagship": true
+      "flagship": true,
+      "level": "classic"
     },
     {
       "title": "Formal proofs in Lean",
@@ -97,7 +117,8 @@
       "status": "later",
       "difficulty": 4,
       "impact": 5,
-      "flagship": true
+      "flagship": true,
+      "level": "hardcore"
     },
     {
       "title": "Packing circles",
@@ -108,7 +129,8 @@
       "link": "#/p/circles-in-square",
       "difficulty": 5,
       "impact": 3,
-      "flagship": false
+      "flagship": false,
+      "level": "classic"
     },
     {
       "title": "Ramsey graphs",
@@ -118,7 +140,8 @@
       "status": "next",
       "difficulty": 5,
       "impact": 3,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Thomson problem: charges on a sphere",
@@ -128,7 +151,8 @@
       "status": "later",
       "difficulty": 3,
       "impact": 3,
-      "flagship": false
+      "flagship": false,
+      "level": "classic"
     },
     {
       "title": "Low-discrepancy point sets",
@@ -138,7 +162,8 @@
       "status": "later",
       "difficulty": 3,
       "impact": 3,
-      "flagship": false
+      "flagship": false,
+      "level": "classic"
     },
     {
       "title": "No three in line",
@@ -149,7 +174,8 @@
       "link": "#/p/no-three-in-line",
       "difficulty": 3,
       "impact": 2,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "3D protein folding (cubic HP)",
@@ -159,7 +185,8 @@
       "status": "next",
       "difficulty": 4,
       "impact": 3,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     },
     {
       "title": "Drug-like molecule design",
@@ -169,7 +196,8 @@
       "status": "later",
       "difficulty": 4,
       "impact": 5,
-      "flagship": true
+      "flagship": true,
+      "level": "hardcore"
     },
     {
       "title": "Crystal structures for materials",
@@ -179,7 +207,8 @@
       "status": "later",
       "difficulty": 4,
       "impact": 4,
-      "flagship": false
+      "flagship": false,
+      "level": "hardcore"
     }
   ]
 }

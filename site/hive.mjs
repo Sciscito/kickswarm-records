@@ -141,7 +141,7 @@ function browserBackend(DATA) {
     return null;
   }
   const note = (key, f) => { const st = (stats[key] ??= { calls: 0, valid: 0, improved: 0, streak: 0 }); if (f === 'fail') st.streak++; else { st[f]++; if (f !== 'calls') st.streak = 0; } };
-  const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : pid === 'protein-folding-2d' ? 'protein-folding-2d' : 'circles'}.mjs`, location.href).href;
+  const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : pid === 'protein-folding-2d' ? 'protein-folding-2d' : pid === 'cap-sets' ? 'cap-sets' : 'circles'}.mjs`, location.href).href;
 
   /** Run a searcher in a module Web Worker: no page, no storage, no keys; stopped after its time. */
   function runInWorker(code, url, input, onBest = () => {}) {
@@ -391,6 +391,12 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         <div class="agents">${cards.join('')}</div>
       </section>`;
     })()}
+    ${(() => {
+      const ps = (s.problems ?? []).map((id) => DATA.problems.find((x) => x.id === id)).filter(Boolean);
+      if (ps.length !== 1) return '';
+      const p = ps[0];
+      return `<div class="epic"><span class="mono">YOUR EPIC</span><b>${esc(p.title)}</b><small>${p.cases.length} cases · ${esc(p.level ?? '')}</small><a class="btn small" href="#/p/${p.id}">See the board</a><button class="btn small" id="epic-invite">${icon('share')} Invite friends</button><button class="btn small ghost" id="epic-all">Hunt everything</button></div>`;
+    })()}
     <div class="voice">
       <button class="btn icon-btn" id="mic" title="Speak" aria-label="Speak a command">${icon('mic')}</button>
       <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
@@ -537,6 +543,14 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const text = 'Join my hive on Kickswarm Records: our computers and AIs hunt open math world records together. Two minutes to join.';
       try { if (navigator.share) await navigator.share({ title: 'Kickswarm Records', text, url }); else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends'); } catch {}
     };
+    $('#epic-invite')?.addEventListener('click', async () => {
+      const pid = st.settings.problems[0];
+      const p = DATA.problems.find((x) => x.id === pid);
+      const url = `${DATA.config.site}/#/join/${pid}`;
+      const text = `Join me on the ${p.title} hunt on Kickswarm: one click, no account.`;
+      try { if (navigator.share) await navigator.share({ title: `Kickswarm · ${p.title}`, text, url }); else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends'); } catch {}
+    });
+    $('#epic-all')?.addEventListener('click', () => patch({ problems: [] }));
     $('#copyagent').onclick = () => copy(agentSetupPrompt(), 'Setup prompt copied: paste it into your agent');
     // Commands, typed or spoken.
     const run = async (text) => {
@@ -565,6 +579,15 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     };
   }
 
+  // Joined from a hunt: set the hive on it and start at once.
+  const joined = (() => { try { const v = sessionStorage.getItem('ks-join'); sessionStorage.removeItem('ks-join'); return v; } catch { return null; } })();
+  if (joined && DATA.problems.some((x) => x.id === joined)) {
+    try {
+      st = await be.settings({ problems: [joined], autostart: true });
+      if (!st.hive.running) st = await be.start();
+      toast(`You joined the ${DATA.problems.find((x) => x.id === joined).title} hunt`);
+    } catch (e) { toast(e.message); }
+  }
   render();
   const tick = setInterval(() => {
     if (!document.body.contains(app) || !location.hash.startsWith('#/hive')) return clearInterval(tick);

@@ -6,6 +6,7 @@ import { judge as square } from '../problems/circles-in-square/judge.mjs';
 import { judge as disc } from '../problems/circles-in-circle/judge.mjs';
 import { judge as nothree } from '../problems/no-three-in-line/judge.mjs';
 import { judge as fold } from '../problems/protein-folding-2d/judge.mjs';
+import { judge as caps } from '../problems/cap-sets/judge.mjs';
 
 test('exact decimals: parse, print, square roots', () => {
   assert.equal(toUnits('0.5'), 5n * 10n ** 29n);
@@ -71,4 +72,12 @@ test('protein folding: self-avoiding chain, H-H contacts counted once, lower is 
   assert.throws(() => fold(c, { moves: 'RU' }), /expected 3 moves/);
   assert.throws(() => fold(c, { moves: 'RUX' }), /not R, L, U or D/);
   assert.equal(fold({ n: 2, sequence: 'HH' }, { moves: 'R' }).score, '0', 'consecutive residues do not count');
+});
+
+test('cap sets: lines mod 3 in every position are caught', () => {
+  assert.equal(caps({ n: 2 }, { points: [[0, 0], [0, 1], [1, 0], [1, 1]] }).score, '4');
+  assert.throws(() => caps({ n: 2 }, { points: [[0, 0], [1, 1], [2, 2]] }), /on a line/);
+  assert.throws(() => caps({ n: 2 }, { points: [[0, 1], [1, 2], [2, 0]] }), /on a line/);
+  assert.throws(() => caps({ n: 2 }, { points: [[0, 3]] }), /among 0, 1, 2/);
+  assert.throws(() => caps({ n: 2 }, { points: [[0, 1], [0, 1]] }), /twice/);
 });

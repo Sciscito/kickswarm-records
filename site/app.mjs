@@ -13,6 +13,9 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const site = () => (location.hostname.endsWith('github.io') ? DATA.config.site : location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/$/, ''));
 const problem = (id) => DATA.problems.find((p) => p.id === id);
 const summary = (pid, cid) => DATA.cases[`${pid}/${cid}`] ?? {};
+/** The level of a hunt: warm-up to learn, classic records, hardcore open problems. */
+const LEVELS = { 'warm-up': ['Warm-up', 'lv-warm'], classic: ['Classic', 'lv-classic'], hardcore: ['Hardcore', 'lv-hard'] };
+const levelTag = (l) => (LEVELS[l] ? `<span class="lvtag ${LEVELS[l][1]}">${LEVELS[l][0]}</span>` : '');
 const tierBadge = (t) => `<span class="badge t-${t ?? 'empty'}">${esc(t ? TIERS[t]?.label : 'Open')}</span>`;
 const ago = (ts) => {
   const s = (Date.now() - new Date(ts).getTime()) / 1000;
@@ -105,6 +108,7 @@ async function paint(el) {
     // An empty case: the bare grid, waiting for its first points.
     el.innerHTML = pid === 'no-three-in-line' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { tier: 'valid', mono: true })
       : pid === 'protein-folding-2d' ? drawSolution(pid, c.n, { moves: 'R'.repeat(c.n - 1) }, Number(size) || 300, { tier: 'valid', mono: true, sequence: c.sequence })
+      : pid === 'cap-sets' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { tier: 'valid', mono: true })
       : '<span class="q">?</span>';
     return;
   }
@@ -157,6 +161,7 @@ function home() {
     'circles-in-square': 'Researchers improve these packings every week. Start from the published best and push one circle a hair further.',
     'circles-in-circle': 'Same game, round arena. The published records are the starting line; the judge rounds down, so a record is a record.',
     'no-three-in-line': 'A puzzle from 1917. Perfect solutions are known up to n = 60. Above that, nobody has ever published one.',
+    'cap-sets': 'A famous open problem in mathematics: the largest set of SET cards with no SET. An AI broke the record in dimension 8 in 2023; dimension 7 has not moved in twenty years.',
     'protein-folding-2d': 'The classic benchmark of protein folding research. Fold a chain so its water-fearing parts huddle; for the 85- and 100-residue chains, the best known folds can still be beaten.',
   };
   const dots = Array.from({ length: 6 }, (_, k) => `<i style="--k:${k}"></i>`).join('');
@@ -205,7 +210,7 @@ function home() {
           <h3 class="h3big">${esc(p.title)}</h3>
           <p class="lead">${esc(pitch[p.id] ?? p.tagline)}</p>
           <ul class="facts-inline mono"><li>${p.cases.length} cases</li><li>n = ${p.cases[0].n}–${p.cases.at(-1).n}</li><li>${esc(p.score_name)}</li></ul>
-          <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Hunt it ${icon('arrow')}</a><button class="btn ghost" data-learnp="${p.id}">Learn more</button><a class="btn ghost" href="#/p/${p.id}">See the board</a></div>
+          <div class="cta-row"><button class="btn primary" data-joinp="${p.id}">${icon('hive')} Join this hunt</button><button class="btn ghost" data-learnp="${p.id}">Learn more</button><a class="btn ghost" href="#/p/${p.id}">See the board</a></div>
         </div>
       </article>`).join('')}
   </section>
@@ -315,6 +320,7 @@ function home() {
   </section>`;
   hydrate();
   app.querySelectorAll('[data-learnp]').forEach((b) => (b.onclick = () => learnProblem(problem(b.dataset.learnp))));
+  app.querySelectorAll('[data-joinp]').forEach((b) => (b.onclick = () => joinHunt(b.dataset.joinp)));
   stopHero?.();
   import('./hero.mjs').then((m) => { stopHero = m.startHero(document.getElementById('swarm')); });
   fetch('catalogue.json').then((r) => r.json()).then((cat) => {
@@ -336,19 +342,22 @@ function problemPage(pid) {
   if (!p) return notFound();
   app.innerHTML = `
   <p class="crumbs"><a href="#/">Hunts</a> / ${esc(p.title)}</p>
+  <p class="kicker mono">${levelTag(p.level)}</p>
   <h1>${esc(p.title)}</h1>
   <p class="lead" style="max-width:46em;color:var(--dim)">${esc(p.statement)}</p>
-  <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Mission on this hunt →</a><button class="btn" id="learn">${icon('telescope')} Learn more</button><a class="btn" href="${esc(p.world_source.url)}" target="_blank" rel="noopener">Reference table ↗</a></div>
+  <div class="cta-row"><button class="btn primary big" id="join">${icon('hive')} Join this hunt</button><button class="btn big" id="invite">${icon('share')} Invite friends</button><button class="btn" id="learn">${icon('telescope')} Learn more</button><a class="btn ghost" href="#/mission/${p.id}">By hand</a><a class="btn" href="${esc(p.world_source.url)}" target="_blank" rel="noopener">Reference table ↗</a></div>
   <div class="legend">${['reference', 'valid', 'swarm', 'perfect', 'world'].filter((t) => t !== 'perfect' || p.id === 'no-three-in-line').filter((t) => t !== 'reference' || p.id !== 'no-three-in-line').map(tierBadge).join('')}${p.id === 'no-three-in-line' ? tierBadge(null) : ''}</div>
   <div class="cases">
     ${p.cases.map((c) => {
       const s = summary(p.id, c.id);
       const world = p.id === 'no-three-in-line' && !c.world;
-      return `<a class="case" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">${p.id === 'protein-folding-2d' ? `${esc(c.id.toUpperCase())} · ${c.n} aa` : `n = ${c.n}`}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : p.id === 'protein-folding-2d' ? `best ${esc(c.world.score)}${c.proven ? '' : ' · open'}` : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
+      return `<a class="case" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">${p.id === 'protein-folding-2d' ? `${esc(c.id.toUpperCase())} · ${c.n} aa` : `n = ${c.n}`}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : p.id === 'protein-folding-2d' || p.id === 'cap-sets' ? `best ${esc(c.world.score)}${c.proven ? '' : ' · open'}` : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
     }).join('')}
   </div>`;
   hydrate();
   document.getElementById('learn').onclick = () => learnProblem(p);
+  document.getElementById('join').onclick = () => joinHunt(p.id);
+  document.getElementById('invite').onclick = () => inviteToHunt(p.id);
 }
 
 /** What a judged score would earn, mirroring the robot (lib/process.mjs). */
@@ -359,7 +368,10 @@ function predict(p, c, score, s) {
     if (!better(score, s.score, p.direction)) return { tier: 'attempt', text: `does not beat the current best (${shortScore(s.score)}). It will be logged as an attempt in the journal.` };
     if (toUnits(score) - toUnits(s.score) < toUnits(minGain)) return { tier: 'attempt', text: `is above the current best by less than the minimum step (${minGain}). It will be logged as an attempt.` };
   }
-  if (p.id === 'protein-folding-2d') {
+  if (p.id === 'cap-sets') {
+    if (Number(score) > Number(c.world.score)) return { tier: 'world', text: `beats the best known cap set (${c.world.score}): a NEW MATHEMATICAL RESULT!` };
+    if (c.proven && Number(score) === Number(c.world.score)) return { tier: 'perfect', text: `matches the proven maximum (${c.world.score}): PERFECT.` };
+  } else if (p.id === 'protein-folding-2d') {
     if (Number(score) < Number(c.world.score)) return { tier: 'world', text: `goes BELOW the best known energy (${c.world.score}): a WORLD RECORD!` };
     if (Number(score) === Number(c.world.score)) return { tier: 'perfect', text: `matches the best known energy (${c.world.score}): PERFECT.` };
   } else if (p.id === 'no-three-in-line') {
@@ -376,7 +388,7 @@ function submitBox(p, c, s) {
   return `
   <h3 style="margin-top:22px">Check your solution</h3>
   <p style="color:var(--dim);font-size:14px">Paste the JSON from your AI. The exact same judge as the robot runs here, in your browser.</p>
-  <textarea id="sol" spellcheck="false" placeholder='{"problem": "${p.id}", "case": "${c.id}", "${p.id === 'no-three-in-line' ? 'points' : p.id === 'protein-folding-2d' ? 'moves' : 'centers'}": ${p.id === 'protein-folding-2d' ? '"RRUL..."' : '[...]'}, "method": "...", "model": "..."}'></textarea>
+  <textarea id="sol" spellcheck="false" placeholder='{"problem": "${p.id}", "case": "${c.id}", "${p.id === 'no-three-in-line' || p.id === 'cap-sets' ? 'points' : p.id === 'protein-folding-2d' ? 'moves' : 'centers'}": ${p.id === 'protein-folding-2d' ? '"RRUL..."' : '[...]'}, "method": "...", "model": "..."}'></textarea>
   <div class="cta-row"><button class="btn primary" id="check">Check</button><button class="btn" id="send" disabled>Submit on GitHub</button></div>
   <div id="verdict"></div>`;
 }
@@ -421,7 +433,9 @@ function casePage(pid, cid) {
   if (!c) return notFound();
   const s = summary(pid, cid);
   const j = DATA.journal[`${pid}/${cid}`] ?? [];
-  const worldLine = p.id === 'protein-folding-2d'
+  const worldLine = p.id === 'cap-sets'
+    ? `${c.world.score} points${c.proven ? ' (proven optimal)' : ' (best known: can still be beaten)'}`
+    : p.id === 'protein-folding-2d'
     ? `energy ${c.world.score}${c.proven ? ' (proven optimal)' : ' (best known: can still be beaten)'}`
     : p.id === 'no-three-in-line'
     ? c.world ? `${2 * c.n} points (perfect), published` : `never published: ${2 * c.n} points would be a world first`
@@ -440,7 +454,7 @@ function casePage(pid, cid) {
       </dl>
       ${s.seq && s.tier !== 'reference' ? `<p style="margin:0 0 6px"><a href="trophies/${s.seq}.svg" target="_blank">Trophy card #${s.seq}</a></p>${shareButtons({ seq: s.seq, problem: p.id, case: c.id, tier: s.tier })}` : ''}
       <p class="hint">Seen a better solution published elsewhere? <a href="https://github.com/${esc(DATA.config.repo)}/issues/new?template=known.yml" target="_blank" rel="noopener">Show it</a>: it is judged, credited to its authors, and you get +2 honey as the scout.</p>
-      <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}/${c.id}">Hunt this case →</a>${s.score ? `<a class="btn" href="records/${p.id}/${c.id}.json" download>Download current best</a>` : ''}</div>
+      <div class="cta-row"><button class="btn primary" id="joinc">${icon('hive')} Join this hunt</button><button class="btn" id="invitec">${icon('share')} Invite</button><a class="btn ghost" href="#/mission/${p.id}/${c.id}">By hand</a>${s.score ? `<a class="btn" href="records/${p.id}/${c.id}.json" download>Download current best</a>` : ''}</div>
       ${submitBox(p, c, s)}
       <h3 style="margin-top:26px">Hunting journal</h3>
       ${j.length ? `<ul class="feed">${j.slice(0, 30).map((e) => `<li>${e.nature === 'record' ? tierBadge(e.tier) : '<span class="badge t-attempt">Attempt</span>'} <span><b>@${esc(e.author)}</b> ${esc(shortScore(e.score))}${e.method ? ` — ${esc(e.method)}` : ''}${e.model ? ` <span class="mono" style="color:var(--faint)">[${esc(e.model)}]</span>` : ''}</span><time>${ago(e.ts)}</time></li>`).join('')}</ul>` : '<p class="empty">No attempt yet on this case.</p>'}
@@ -450,6 +464,8 @@ function casePage(pid, cid) {
   wireSubmit(p, c, s);
   wireShare();
   document.getElementById('learn').onclick = () => learnProblem(p);
+  document.getElementById('joinc').onclick = () => joinHunt(p.id);
+  document.getElementById('invitec').onclick = () => inviteToHunt(p.id);
 }
 
 function missionPage(only, onlyCase) {
@@ -569,7 +585,8 @@ async function catalogue() {
   const stars = (k) => '★'.repeat(k) + '<span class="off">' + '★'.repeat(5 - k) + '</span>';
   const ST = { open: ['Live', 't-swarm'], next: ['Next', 't-perfect'], later: ['Later', 't-reference'] };
   const RAR = (h) => (h.status !== 'open' ? null : h.difficulty >= 5 ? ['Legendary', 'r-legendary'] : h.difficulty >= 4 ? ['Epic', 'r-epic'] : ['Rare', 'r-rare']);
-  const state = { domain: 'all', status: 'all', sort: 'flagship' };
+  const state = { domain: 'all', status: 'all', level: 'all', sort: 'flagship' };
+  const lvOf = (h) => h.level ?? (h.link?.startsWith('#/p/') ? problem(h.link.split('/')[2])?.level : null);
   app.innerHTML = `
   <p class="kicker mono">The hunts</p>
   <h1 class="h2big" style="margin-bottom:16px">Pick your hunt.<br><em>Every one is checkable.</em></h1>
@@ -577,12 +594,13 @@ async function catalogue() {
   <div class="filters">
     <div class="chips" id="f-domain">${['all', ...Object.keys(cat.domains)].map((d) => `<button class="chip ${d === 'all' ? 'on' : ''}" data-v="${d}">${esc(d === 'all' ? 'All' : cat.domains[d])}</button>`).join('')}</div>
     <div class="chips" id="f-status">${[['all', 'Any status'], ['open', 'Live now'], ['next', 'Next'], ['later', 'Later']].map(([v, l]) => `<button class="chip ${v === 'all' ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="chips" id="f-level">${[['all', 'Any level'], ['warm-up', 'Warm-up'], ['classic', 'Classic'], ['hardcore', 'Hardcore']].map(([v, l]) => `<button class="chip ${v === 'all' ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
     <label class="sortby">Sort <select id="f-sort"><option value="flagship">Flagships first</option><option value="impact">Impact</option><option value="easy">Easiest first</option><option value="hard">Hardest first</option></select></label>
   </div>
   <div class="hub" id="hub"></div>
   <p style="color:var(--dim);margin-top:24px">Know a problem with an exact judge that matters? Open an issue on the repository: the best proposals become the next hunts.</p>`;
   const draw = () => {
-    let list = cat.hunts.filter((h) => (state.domain === 'all' || h.domain === state.domain) && (state.status === 'all' || h.status === state.status));
+    let list = cat.hunts.filter((h) => (state.domain === 'all' || h.domain === state.domain) && (state.status === 'all' || h.status === state.status) && (state.level === 'all' || lvOf(h) === state.level));
     const by = { flagship: (a, b) => (b.flagship - a.flagship) || (b.status === 'open') - (a.status === 'open') || b.impact - a.impact, impact: (a, b) => b.impact - a.impact, easy: (a, b) => a.difficulty - b.difficulty, hard: (a, b) => b.difficulty - a.difficulty };
     list = list.sort(by[state.sort]);
     document.getElementById('hub').innerHTML = list.map((h) => {
@@ -593,16 +611,18 @@ async function catalogue() {
         ${h.flagship ? '<span class="flagtag mono">Flagship</span>' : ''}
         ${p ? `<a class="hthumb" href="${esc(h.link)}">${art(p.id, (DATA.feed.find((e) => e.problem === p.id && e.nature === 'record')?.case) ?? p.cases[Math.floor(p.cases.length / 2)].id, 260)}</a>` : `<div class="hthumb ghost"><span>${esc(cat.domains[h.domain] ?? '')}</span></div>`}
         <div class="hbody">
-          <div class="hmeta"><span class="badge ${ST[h.status][1]}">${ST[h.status][0]}</span>${r ? `<span class="rar-tag ${r[1]}">${r[0]} rewards</span>` : ''}<span class="dom mono">${esc(cat.domains[h.domain] ?? h.domain)}</span></div>
+          <div class="hmeta">${levelTag(h.level ?? (p && p.level))}<span class="badge ${ST[h.status][1]}">${ST[h.status][0]}</span>${r ? `<span class="rar-tag ${r[1]}">${r[0]} rewards</span>` : ''}<span class="dom mono">${esc(cat.domains[h.domain] ?? h.domain)}</span></div>
           <h3>${h.link ? `<a href="${esc(h.link)}">${esc(h.title)}</a>` : esc(h.title)}</h3>
           <p>${esc(h.why)}</p>
           <div class="hstats"><span title="Difficulty">Difficulty <b class="stars">${stars(h.difficulty)}</b></span><span title="Impact">Impact <b class="stars imp">${stars(h.impact)}</b></span></div>
           <p class="ver"><b>Verified:</b> ${esc(h.verify)}</p>
-          <div class="cta-row" style="margin-top:auto">${h.link ? `<a class="btn primary small" href="${esc(h.link.replace('#/p/', '#/mission/'))}">Hunt it ${icon('arrow')}</a>` : ''}<button class="btn small" data-learn="${esc(h.title)}">Learn more</button></div>
+          <div class="cta-row" style="margin-top:auto">${live ? `<button class="btn primary small" data-join="${esc(live)}">${icon('hive')} Join</button><button class="btn small" data-invite="${esc(live)}">Invite</button>` : ''}<button class="btn small" data-learn="${esc(h.title)}">Learn more</button></div>
         </div>
       </article>`;
     }).join('') || '<p class="empty">No hunt matches these filters.</p>';
     hydrate();
+    app.querySelectorAll('[data-join]').forEach((b) => (b.onclick = () => joinHunt(b.dataset.join)));
+    app.querySelectorAll('[data-invite]').forEach((b) => (b.onclick = () => inviteToHunt(b.dataset.invite)));
     app.querySelectorAll('[data-learn]').forEach((b) => (b.onclick = () => {
       const h = cat.hunts.find((x) => x.title === b.dataset.learn);
       const live = h.link?.startsWith('#/p/') ? problem(h.link.split('/')[2]) : null;
@@ -612,6 +632,7 @@ async function catalogue() {
   const chips = (id, key) => app.querySelectorAll(`#${id} .chip`).forEach((b) => (b.onclick = () => { app.querySelectorAll(`#${id} .chip`).forEach((x) => x.classList.remove('on')); b.classList.add('on'); state[key] = b.dataset.v; draw(); }));
   chips('f-domain', 'domain');
   chips('f-status', 'status');
+  chips('f-level', 'level');
   document.getElementById('f-sort').onchange = (e) => { state.sort = e.target.value; draw(); };
   draw();
 }
@@ -934,6 +955,51 @@ function learnMore(x) {
 }
 const learnProblem = (p) => learnMore({ title: p.title, about: p.about, why: p.tagline, verify: p.about?.verify ?? `Exact: ${p.statement}`, go: `#/mission/${p.id}` });
 
+/** Join a hunt in one click: the hive is set on it and starts at once. */
+function joinHunt(pid) {
+  try { sessionStorage.setItem('ks-join', pid); } catch {}
+  location.hash = '#/hive';
+}
+/** The link that invites friends to a hunt. */
+function inviteLink(pid) {
+  const by = moi();
+  return `${DATA.config.site}/#/join/${pid}${by ? `/${encodeURIComponent(by)}` : ''}`;
+}
+async function inviteToHunt(pid) {
+  const p = problem(pid);
+  const url = inviteLink(pid);
+  const text = `Join me on the ${p.title} hunt on Kickswarm: our AIs and computers team up on ${p.level === 'hardcore' ? 'an open problem nobody has solved' : 'world records'}. One click to join.`;
+  try {
+    if (navigator.share) await navigator.share({ title: `Kickswarm · ${p.title}`, text, url });
+    else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends');
+  } catch {}
+}
+/** Hunters on a hunt over the last 7 days, from the public feed. */
+function huntersOn(pid) {
+  const since = new Date(Date.now() - 7 * 86400000).toISOString();
+  return new Set(DATA.feed.filter((e) => e.problem === pid && e.ts >= since).map((e) => e.author)).size;
+}
+/** The page a friend lands on: one button. */
+function joinLanding(pid, by) {
+  const p = problem(pid);
+  if (!p) return notFound();
+  const fid = (DATA.feed.find((e) => e.problem === pid && e.nature === 'record')?.case) ?? p.cases[Math.floor(p.cases.length / 2)].id;
+  app.innerHTML = `
+  <section class="landing">
+    <div>
+      <p class="kicker mono">${by ? `@${esc(by)} invites you` : 'You are invited'} · ${levelTag(p.level)}</p>
+      <h1 class="display" style="font-size:clamp(46px,8vw,104px)">Join the<br><em>${esc(p.title)}</em><br>hunt.</h1>
+      <p class="lead dimlead" style="margin-top:0">${esc(p.about?.what ?? p.tagline)}</p>
+      <div class="cta-row"><button class="btn primary big" id="joinnow">${icon('hive')} Join the hunt</button><button class="btn ghost big" id="learn">Learn more</button></div>
+      <p class="hint">${huntersOn(pid)} hunter(s) on it this week · no account, nothing to install · free models first</p>
+    </div>
+    ${plate(pid, fid, 600, '★', 'plate')}
+  </section>`;
+  hydrate();
+  document.getElementById('joinnow').onclick = () => joinHunt(pid);
+  document.getElementById('learn').onclick = () => learnProblem(p);
+}
+
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
@@ -955,6 +1021,7 @@ function route() {
   if (parts[0] === 'start') return joinPage();
   if (parts[0] === 'stats') return statsPage();
   if (parts[0] === 'players') return playersPage();
+  if (parts[0] === 'join' && parts[1]) return joinLanding(parts[1], parts[2] ? decodeURIComponent(parts[2]) : null);
   if (parts[0] === 'me') { const m = moi(); if (m) { location.hash = `#/u/${m}`; return; } return playersPage(); }
   if (parts[0] === 'hive') return import('./hive.mjs').then((m) => m.hivePage(app, DATA, { toast, copy, submitUrl })).catch((e) => (app.innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`));
   return notFound();

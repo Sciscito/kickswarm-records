@@ -1,0 +1,90 @@
+{
+  "id": "cap-sets",
+  "title": "Cap sets",
+  "level": "hardcore",
+  "domain": "math",
+  "flagship": true,
+  "tagline": "The largest set of points in a 3-coloured hypercube with no three on a line.",
+  "direction": "max",
+  "score_name": "points",
+  "statement": "Points are words of length n over {0, 1, 2}. Three distinct points x, y, z are on a line when x + y + z = 0 in every position, modulo 3 (the card game SET is n = 4). A cap set has no line at all. Score = the number of points. Sizes are proven optimal up to n = 6; for n = 7 and n = 8 the best known sets may still be beaten, and any improvement is a new mathematical result.",
+  "format": "{ \"points\": [[0,1,2,0,...], ...] }  (each point: n numbers in {0, 1, 2})",
+  "world_source": {
+    "label": "Best known cap sets: n = 7 (236), n = 8 (512, FunSearch, Nature 2023)",
+    "url": "https://www.nature.com/articles/s41586-023-06924-6"
+  },
+  "about": {
+    "what": "Imagine the card game SET with cards that have n features instead of 4. A \"cap set\" is a collection of cards with no SET among them. How big can it be? For 4 features the answer is 20; for 6 it is 112. Beyond that nobody knows.",
+    "why": "One of the most famous problems of additive combinatorics. A 2016 breakthrough (Ellenberg and Gijswijt) settled its growth rate in a paper hailed across mathematics; in 2023 DeepMind's FunSearch made headlines by finding a larger cap set in dimension 8 with an AI writing search programs, exactly what this hive does.",
+    "impact": "Real and recognised: a cap set larger than 236 in dimension 7 or 512 in dimension 8 would be a new result that mathematicians would cite. Hard: strong teams have tried.",
+    "fun": "The 2023 FunSearch record was found by a language model writing small programs, scored by an exact checker, evolved over millions of tries: the same loop as your hive.",
+    "links": [
+      [
+        "FunSearch (Nature, 2023)",
+        "https://www.nature.com/articles/s41586-023-06924-6"
+      ],
+      [
+        "Ellenberg & Gijswijt (Annals of Mathematics, 2017)",
+        "https://arxiv.org/abs/1605.09223"
+      ]
+    ]
+  },
+  "strategies": [
+    "Build the set from a priority function over points (FunSearch style): sort all 3^n points by a clever score, add each point that creates no line.",
+    "Product constructions: combine cap sets of smaller dimensions (a cap set in n and one in m give one in n + m), then extend greedily.",
+    "Start from the current best and do local search: remove a few points, then add as many as possible without creating a line.",
+    "Exploit symmetry: look for cap sets invariant under a group of affine maps, which shrinks the search.",
+    "Encode as maximum independent set in the graph of lines and use a clique / MIS solver on the complement.",
+    "Simulated annealing on the set: swap points in and out, penalising lines, at a slowly decreasing temperature."
+  ],
+  "cases": [
+    {
+      "id": "4",
+      "n": 4,
+      "world": {
+        "score": "20",
+        "date": "1970"
+      },
+      "proven": true,
+      "max": "20"
+    },
+    {
+      "id": "5",
+      "n": 5,
+      "world": {
+        "score": "45",
+        "date": "2002"
+      },
+      "proven": true,
+      "max": "45"
+    },
+    {
+      "id": "6",
+      "n": 6,
+      "world": {
+        "score": "112",
+        "date": "2008"
+      },
+      "proven": true,
+      "max": "112"
+    },
+    {
+      "id": "7",
+      "n": 7,
+      "world": {
+        "score": "236",
+        "date": "2004"
+      },
+      "proven": false
+    },
+    {
+      "id": "8",
+      "n": 8,
+      "world": {
+        "score": "512",
+        "date": "2023"
+      },
+      "proven": false
+    }
+  ]
+}
