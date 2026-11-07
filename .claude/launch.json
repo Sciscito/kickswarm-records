@@ -15,7 +15,8 @@
       "runtimeExecutable": "node",
       "runtimeArgs": [
         "scripts/hive.mjs",
-        "7878"
+        "7878",
+        "--no-open"
       ],
       "port": 7878
     }

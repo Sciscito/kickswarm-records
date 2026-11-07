@@ -137,7 +137,7 @@ function feedItem(e) {
   const what = e.nature === 'record'
     ? `${tierBadge(e.tier)} <span><a href="#/p/${e.problem}/${e.case}">${esc(p?.title)} · n=${esc(e.case)}</a> → ${esc(shortScore(e.score))}</span>`
     : `<span class="badge t-attempt">Attempt</span> <span><a href="#/p/${e.problem}/${e.case}">${esc(p?.title)} · n=${esc(e.case)}</a> · ${esc(shortScore(e.score))}</span>`;
-  return `<li><b>@${esc(e.author)}</b> ${what}<time>${ago(e.ts)}</time></li>`;
+  return `<li><a class="who" href="#/u/${esc(e.author)}">@${esc(e.author)}</a> ${what}<time>${ago(e.ts)}</time></li>`;
 }
 
 // ---------- pages ----------
@@ -167,7 +167,7 @@ function home() {
       <p class="lead">Lend your AI and your idle computer to a public swarm attacking open math records. Every answer is checked to the last digit. Beat one, and your solution becomes a one-of-a-kind trophy, signed with your name.</p>
       <div class="cta-row">
         <a class="btn primary big" href="#/hive">Start your hive ${icon('arrow')}</a>
-        <a class="btn ghost big" href="#/how">How it works</a>
+        <a class="btn ghost big" href="#/start">Join in 2 minutes</a>
       </div>
       <dl class="hero-stats mono">
         <div><dt>cases</dt><dd>${total}</dd></div>
@@ -234,18 +234,74 @@ function home() {
   </section>
 
   <section class="sec reveal">
-    <p class="secno mono">04 — Hall of fame</p>
-    <div class="two">
-      <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 10).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
-      <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 10).map((l, i) => `<tr><td><span class="rank mono">${String(i + 1).padStart(2, '0')}</span> @${esc(l.author)}</td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet.</p>'}<p class="hint" style="margin-top:12px">Valid +1 · swarm record +10 · perfect +25 · world record +100. Honey is a score, never money.</p></div>
+    <p class="secno mono">04 — What you get</p>
+    <h2 class="h2big">Every verified idea<br><em>becomes yours, forever.</em></h2>
+    <div class="gets">
+      <div class="get-collection">
+        <div class="fan">${DATA.trophies.slice(0, 5).map((t, i) => `<a href="#/u/${esc(t.author)}" style="--i:${i}" title="@${esc(t.author)}"><img src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}" loading="lazy"></a>`).join('')}</div>
+        <div class="rarity">${['valid', 'swarm', 'perfect', 'known', 'world'].map((t) => tierBadge(t)).join('')}</div>
+      </div>
+      <div class="get-list">
+        <div><h3>${icon('hive')} A collection</h3><p>Each record mints a trophy card drawn from your own solution. Five rarities, from a first valid solution to an animated gold world record. Your cards live on your <a href="#/u/${esc(DATA.leaderboard[0]?.author ?? 'kickswarm-demo')}">hunter page</a>.</p></div>
+        <div><h3>${icon('spark')} Honey</h3><p>A score of verified contribution: +1 valid, +10 swarm record, +25 perfect, +100 world record, +2 for spotting a better solution elsewhere. It counts what you really did, and nothing else.</p></div>
+        <div><h3>${icon('telescope')} Credit that lasts</h3><p>Your name, in a public chained registry, next to the solution. A world record found here is yours to report to the researchers who keep the tables.</p></div>
+        <div><h3>${icon('key')} Later: pools</h3><p>Sponsors will post rewards on hard problems; the hives that solve them will share according to verified contribution. Planned, not live: only with a proper legal framework, and never a token.</p></div>
+      </div>
     </div>
   </section>
 
   <section class="sec reveal">
-    <p class="secno mono">05 — Next</p>
-    <h2 class="h2big">After the records:<br><em>problems the world runs on.</em></h2>
+    <p class="secno mono">05 — Proof so far</p>
+    <h2 class="h2big">Day one,<br><em>already working.</em></h2>
+    <div class="proof">
+      <div><b>${DATA.stats.records}</b><span>records set by the swarm</span></div>
+      <div><b>${DATA.stats.entries}</b><span>entries in the public registry, every one re-checkable</span></div>
+      <div><b>${DATA.stats.attempts}</b><span>attempts logged, failures included, so nobody repeats a dead end</span></div>
+      <div><b>${DATA.problems.reduce((a, p) => a + p.cases.length, 0)}</b><span>open cases, 100 of them starting from published world records</span></div>
+    </div>
+    <div class="two" style="margin-top:28px">
+      <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 8).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
+      <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 8).map((l, i) => `<tr><td><span class="rank mono">${String(i + 1).padStart(2, '0')}</span> <a href="#/u/${esc(l.author)}">@${esc(l.author)}</a></td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet.</p>'}</div>
+    </div>
+  </section>
+
+  <section class="sec reveal">
+    <p class="secno mono">06 — The ladder</p>
+    <h2 class="h2big">Each rung harder,<br><em>each rung more useful.</em></h2>
+    <p class="lead dimlead">The same machine (missions, searchers, an exact judge, a public registry) climbs toward problems that matter more, one verified rung at a time.</p>
+    <ol class="ladder">
+      <li class="now"><span class="mono">Now</span><h3>Open records</h3><p>Packings, grids, combinatorics. Exact judges, instant proof. Where the swarm learns to work.</p></li>
+      <li><span class="mono">Next</span><h3>Problems industry runs on</h3><p>Delivery routes, factory schedules, faster matrix products for AI chips, sorting networks, error-correcting codes.</p></li>
+      <li><span class="mono">Then</span><h3>Science and software</h3><p>Formal proofs checked by Lean, open-source bugs fixed with tests and hidden tests, scientific code made faster.</p></li>
+      <li><span class="mono">Later</span><h3>Bounties and pools</h3><p>Anyone posts a hard, checkable problem with a reward; hives pool their compute; contribution decides the share.</p></li>
+    </ol>
     <div class="strip" id="strip"></div>
-    <p style="margin-top:18px"><a href="#/catalogue">The full catalogue, ranked by impact ${icon('arrow')}</a></p>
+    <p style="margin-top:18px"><a href="#/catalogue">The catalogue of next hunts, ranked by impact ${icon('arrow')}</a></p>
+  </section>
+
+  <section class="sec reveal">
+    <p class="secno mono">07 — Open data for science</p>
+    <div class="opendata">
+      <div>
+        <h2 class="h2big">Nothing is hidden.<br><em>Not even the failures.</em></h2>
+        <p class="lead dimlead">Every solution, every attempt and the method behind it is published as open data. Researchers get the best configurations and a map of what does not work, the part science rarely publishes.</p>
+        <div class="cta-row"><a class="btn primary" href="#/data">Get the data ${icon('download')}</a><a class="btn ghost" href="https://github.com/${esc(DATA.config.repo)}" target="_blank" rel="noopener">The code ${icon('arrow')}</a></div>
+      </div>
+      <pre class="datapeek mono">${esc(JSON.stringify((({ seq, nature, problem: pr, case: c, author, score, tier, model }) => ({ seq, nature, problem: pr, case: c, author, score, tier, model }))(DATA.feed[0] ?? {}), null, 2))}
+<span class="dim">… ${DATA.stats.entries} entries, each chained to the previous by SHA-256</span></pre>
+    </div>
+  </section>
+
+  <section class="sec reveal">
+    <p class="secno mono">08 — Why</p>
+    <div class="why">
+      <h2 class="h2big">Serving tokens will be easy.<br><em>Counting real work will not.</em></h2>
+      <div class="why-cols">
+        <p>Soon everyone will have AI and spare compute. The scarce thing is a way to point all of it at problems that matter, and to know who really contributed.</p>
+        <p>Kickswarm's answer is a unit: <b>the verified task</b>. Work counts only when a machine can check it. Honey and shares follow the checks; 30% goes to the commons that keep the hives running.</p>
+        <p>That is what a fair economy looks like when machines do most of the work: open, measured, credited. Records are where it starts.</p>
+      </div>
+    </div>
   </section>
 
   <section class="outro bleed reveal">
@@ -497,6 +553,116 @@ async function catalogue() {
   <p style="color:var(--dim);margin-top:20px">Know a problem with an exact judge that matters? Open an issue on the repository: the best proposals become the next hunts.</p>`;
 }
 
+/** A hunter's collection: their trophy cards, honey and records. */
+function hunterPage(author) {
+  const mine = DATA.trophies.filter((t) => t.author === author);
+  const lb = DATA.leaderboard.find((l) => l.author === author);
+  const rank = DATA.leaderboard.findIndex((l) => l.author === author);
+  const tiers = Object.fromEntries(['world', 'perfect', 'swarm', 'known', 'valid'].map((t) => [t, mine.filter((x) => x.tier === t).length]));
+  app.innerHTML = `
+  <p class="crumbs"><a href="#/">Hunts</a> / Hunters / @${esc(author)}</p>
+  <div class="hunter-head">
+    <div class="avatar-hex" aria-hidden="true"><span>${esc(author.slice(0, 2).toUpperCase())}</span></div>
+    <div>
+      <p class="kicker mono">Hunter${rank >= 0 ? ` · rank ${rank + 1} of ${DATA.leaderboard.length}` : ''}</p>
+      <h1>@${esc(author)}</h1>
+      <p class="mono hunter-stats"><b>${lb?.honey ?? 0}</b> honey · <b>${mine.length}</b> card${mine.length === 1 ? '' : 's'} · <a href="https://github.com/${esc(author)}" target="_blank" rel="noopener">GitHub ↗</a></p>
+    </div>
+  </div>
+  <div class="rarity big">${Object.entries(tiers).map(([t, k]) => `<span class="rar ${k ? '' : 'none'}">${tierBadge(t)} <b class="mono">${k}</b></span>`).join('')}</div>
+  ${mine.length ? `<div class="gallery">${mine.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">No card yet. <a href="#/hive">Start your hive</a>.</p>'}`;
+  wireShare();
+}
+
+/** Open data: what is published and how to use it. */
+function dataPage() {
+  const base = DATA.config.site;
+  const raw = `https://raw.githubusercontent.com/${DATA.config.repo}/main`;
+  app.innerHTML = `<div class="prose">
+  <p class="kicker mono">Open data</p>
+  <h1>All of it, <em>for science.</em></h1>
+  <p class="lead dimlead">Kickswarm Records publishes every solution and every attempt, with the method used and the model that wrote the searcher. The data is under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>: use it for anything, credit "Kickswarm Records contributors".</p>
+  <h2>Files</h2>
+  <ul>
+    <li><a href="registry.jsonl"><span class="mono">registry.jsonl</span></a>: every event, one JSON line each, chained by SHA-256 (${DATA.stats.entries} entries). Records, attempts (with method and model), references, world-record updates.</li>
+    <li><span class="mono">records/&lt;problem&gt;/&lt;case&gt;.json</span>: the current best solution of each case, e.g. <a href="records/no-three-in-line/61.json">no-three-in-line/61</a>.</li>
+    <li><a href="https://github.com/${esc(DATA.config.repo)}/tree/main/solutions" target="_blank" rel="noopener"><span class="mono">solutions/</span></a>: every improving solution ever recorded, by case and registry number.</li>
+    <li><a href="data.json"><span class="mono">data.json</span></a>: the summary the site reads (cases, journal, leaderboard).</li>
+    <li><span class="mono">problems/&lt;id&gt;/judge.mjs</span>: the exact judges, to re-check anything yourself.</li>
+  </ul>
+  <h2>Re-check everything</h2>
+  <pre class="prompt">git clone https://github.com/${esc(DATA.config.repo)}
+cd kickswarm-records
+npm run audit   # recomputes the registry chain and re-judges every record</pre>
+  <h2>Load it in Python</h2>
+  <pre class="prompt">import json, urllib.request
+rows = [json.loads(l) for l in urllib.request.urlopen("${base}/registry.jsonl").read().decode().splitlines()]
+attempts = [r for r in rows if r["nature"] == "attempt"]   # what was tried, and failed
+records = [r for r in rows if r["nature"] == "record"]</pre>
+  <p>The code is under Apache 2.0. Starting packings and world-record values come from Packomania (E. Specht and contributors) and stay credited to them. Raw files are also served from <span class="mono">${esc(raw)}</span>.</p>
+  </div>`;
+}
+
+/** Joining, for people who have never opened a terminal. */
+function joinPage() {
+  const zip = `https://github.com/${DATA.config.repo}/archive/refs/heads/main.zip`;
+  app.innerHTML = `
+  <p class="kicker mono">Join the swarm</p>
+  <h1 class="h2big" style="margin-bottom:16px">Join in <em>two minutes.</em></h1>
+  <p class="lead dimlead" style="margin-top:0">No account needed to hunt. Pick a path; you can add the others later.</p>
+  <div class="paths">
+    <section class="path">
+      <span class="pnum mono">A</span><span class="pi">${icon('phone')}</span>
+      <h2>This device, right now</h2>
+      <p>Phone, tablet or computer. The hive runs in the page while it stays open.</p>
+      <ol class="steps"><li>Press the button.</li><li>Pick a preset.</li><li>Press Start.</li></ol>
+      <a class="btn primary big" href="#/hive">Start here ${icon('arrow')}</a>
+    </section>
+    <section class="path featured">
+      <span class="pnum mono">B</span><span class="pi">${icon('laptop')}</span>
+      <h2>Your computer, full power</h2>
+      <p>Every core, scheduled nights, local models and your subscriptions. Windows, Mac or Linux.</p>
+      <ol class="steps">
+        <li>Install <a href="https://nodejs.org/en/download" target="_blank" rel="noopener">Node.js</a> (the LTS version, default choices). Free.</li>
+        <li><a href="${zip}">Download Kickswarm</a> and unzip it anywhere.</li>
+        <li>Double-click <span class="mono">start-hive</span> (<span class="mono">.cmd</span> on Windows, <span class="mono">.command</span> on Mac). Your dashboard opens: pick a preset, press Start.</li>
+      </ol>
+      <details><summary>Prefer to let an AI agent do it?</summary><p class="hint">Paste the setup prompt from <a href="#/hive">your hive page</a> into Claude Code, Codex or Gemini CLI. It asks before every step.</p></details>
+    </section>
+    <section class="path">
+      <span class="pnum mono">C</span><span class="pi">${icon('key')}</span>
+      <h2>Add free AI power</h2>
+      <p>The hive works without AI, but a free model writes smarter searchers.</p>
+      <ol class="steps">
+        <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> with your Google account.</li>
+        <li>Press “Create API key” and copy it.</li>
+        <li>In your hive, open “Add a source”, paste it next to Google Gemini, press Connect.</li>
+      </ol>
+      <p class="hint">Free, with daily limits. The key stays on your device. Never paste it in a chat.</p>
+    </section>
+  </div>
+  <section class="invite">
+    <div>
+      <h2 class="h3big">Bring your friends. <em>Every core counts.</em></h2>
+      <p class="dimlead" style="margin:0">Ten friends with a laptop each, at night, is a hundred cores hunting. Send them the link; the page explains the rest.</p>
+    </div>
+    <button class="btn primary big" id="invite">${icon('share')} Invite friends</button>
+  </section>`;
+  wireInvite();
+}
+function wireInvite() {
+  const b = document.getElementById('invite');
+  if (!b) return;
+  b.onclick = async () => {
+    const url = `${DATA.config.site}/#/start`;
+    const text = 'Join my hive on Kickswarm Records: our computers and AIs hunt open math world records together. Two minutes to join.';
+    try {
+      if (navigator.share) await navigator.share({ title: 'Kickswarm Records', text, url });
+      else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends');
+    } catch {}
+  };
+}
+
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
@@ -513,6 +679,9 @@ function route() {
   if (parts[0] === 'gallery') return (gallery(), wireShare());
   if (parts[0] === 'how') return how();
   if (parts[0] === 'catalogue') return catalogue();
+  if (parts[0] === 'u' && parts[1]) return hunterPage(decodeURIComponent(parts[1]));
+  if (parts[0] === 'data') return dataPage();
+  if (parts[0] === 'start') return joinPage();
   if (parts[0] === 'hive') return import('./hive.mjs').then((m) => m.hivePage(app, DATA, { toast, copy, submitUrl })).catch((e) => (app.innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`));
   return notFound();
 }

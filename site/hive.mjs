@@ -264,6 +264,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       <button class="go ${h.running ? 'on' : ''}" id="go" aria-pressed="${h.running}"><span class="orbit" style="--n:${Math.min(12, s.workers)}">${BEE}${Array.from({ length: Math.min(12, s.workers) }, (_, k) => `<i style="--k:${k}"></i>`).join('')}</span><b>${h.running ? (h.stopping ? 'Stopping…' : h.waiting ? 'Waiting for its hours' : 'Hunting') : 'Start'}</b><small>${h.running ? 'tap to stop' : `${s.workers} worker${s.workers > 1 ? 's' : ''} · ${esc(PRESETS[s.preset]?.label ?? 'custom')}`}</small></button>
     </div>
 
+    <div class="cta-row" style="margin-top:10px"><button class="btn small" id="invite2">${icon('share')} Invite friends</button><a class="btn small" href="#/start">Help me set up</a></div>
     <div class="voice">
       <button class="btn icon-btn" id="mic" title="Speak" aria-label="Speak a command">${icon('mic')}</button>
       <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
@@ -315,7 +316,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
 
     <details class="panel" style="margin-top:24px" ${local ? '' : 'open'}><summary><b>On a computer: let your agent set everything up</b></summary>
       <p class="hint">Paste this once into Claude Code, Codex or Gemini CLI. It installs the hive, shows you what it found, asks before every connection, and schedules nights only if you say yes.</p>
-      <div class="cta-row"><button class="btn primary" id="copyagent">Copy the setup prompt</button></div>
+      <div class="cta-row"><button class="btn primary" id="copyagent">Copy the setup prompt</button><a class="btn" href="#/start">Simple setup, no agent</a></div>
       <pre class="prompt">${esc(agentSetupPrompt())}</pre>
     </details>`;
     wire();
@@ -369,6 +370,11 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     $('#unsched')?.addEventListener('click', async () => { try { const r = await be.schedule(false); st = r; render(); toast(r.message); } catch (e) { toast(e.message); } });
     app.querySelectorAll('[data-submit]').forEach((b) => (b.onclick = () => submitUrl(st.hive.improvements[Number(b.dataset.submit)].sub)));
     $('#installapp')?.addEventListener('click', async () => { await window.__ksInstall.prompt(); window.__ksInstall = null; render(); });
+    $('#invite2').onclick = async () => {
+      const url = `${DATA.config.site}/#/start`;
+      const text = 'Join my hive on Kickswarm Records: our computers and AIs hunt open math world records together. Two minutes to join.';
+      try { if (navigator.share) await navigator.share({ title: 'Kickswarm Records', text, url }); else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends'); } catch {}
+    };
     $('#copyagent').onclick = () => copy(agentSetupPrompt(), 'Setup prompt copied: paste it into your agent');
     // Commands, typed or spoken.
     const run = async (text) => {

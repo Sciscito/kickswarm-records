@@ -2,7 +2,7 @@
 // personal hive (inventory, presets, sources, quotas, schedule, voice commands, live activity).
 // It listens on 127.0.0.1 only and every API call needs the session token printed at start.
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -170,6 +170,11 @@ createServer(async (req, res) => {
     res.writeHead(404).end('not found');
   }
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`\nKickswarm personal hive dashboard\n\n  Open: http://localhost:${PORT}/?t=${TOKEN}#/hive\n\n  (Local only. The link holds this session's token; keep it to yourself. Ctrl+C to quit.)\n`);
+  const link = `http://localhost:${PORT}/?t=${TOKEN}#/hive`;
+  console.log(`\nKickswarm personal hive dashboard\n\n  Open: ${link}\n\n  (Local only. The link holds this session's token; keep it to yourself. Ctrl+C to quit.)\n`);
+  if (!process.argv.includes('--no-open')) {
+    const [cmd, args] = process.platform === 'win32' ? ['explorer', [link]] : process.platform === 'darwin' ? ['open', [link]] : ['xdg-open', [link]];
+    try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch {}
+  }
 });
 void resolve;
