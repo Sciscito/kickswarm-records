@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Work in a scratch copy: the robot writes records, solutions, trophies and the registry in the cwd.
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -105,4 +105,25 @@ test('a better solution known elsewhere is credited to its authors and becomes t
   assert.equal(r.entry.honey, 2);
   assert.equal(r.entry.credit, 'H. Dudeney (1917)');
   assert.match(readFileSync(`trophies/${r.entry.seq}.svg`, 'utf8'), /H. Dudeney \(1917\), found by @scout/);
+});
+
+test('no account: a signed submission credits the hunter name, which then belongs to that key', async () => {
+  const url = (f) => pathToFileURL(join(dir, 'lib', f)).href;
+  const { newIdentity, signSubmission } = await import(url('keys.mjs'));
+  const { resolveAuthor } = await import(url('process.mjs'));
+  const me = await newIdentity('lea');
+  const sub = await signSubmission({ problem: 'no-three-in-line', case: '20', points: perfect(5).map(([x, y]) => [x, y]) }, me);
+  const who = await resolveAuthor(sub, 'relay-bot');
+  assert.equal(who.author, 'lea');
+  assert.match(who.owner, /^key:[0-9a-f]{16}$/);
+  const r = await processSubmission(sub, { ...who, issue: 9 });
+  assert.equal(r.status, 'record', r.message);
+  assert.equal(r.entry.owner, who.owner);
+  // Someone else cannot use the name, and a tampered submission is refused.
+  const thief = await newIdentity('lea');
+  const s2 = await signSubmission({ problem: 'no-three-in-line', case: '21', points: [[0, 0]] }, thief);
+  const r2 = await processSubmission(s2, { ...(await resolveAuthor(s2, 'x')), issue: 10 });
+  assert.match(r2.message, /already belongs to another hunter/);
+  await assert.rejects(resolveAuthor({ ...sub, points: [[1, 1]] }, 'x'), /signature does not match/);
+  await assert.rejects(resolveAuthor({ ...sub, sig: undefined }, 'x'), /needs a signature/);
 });

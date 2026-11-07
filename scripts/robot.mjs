@@ -6,7 +6,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
-import { extractJson, processSubmission } from '../lib/process.mjs';
+import { extractJson, processSubmission, resolveAuthor } from '../lib/process.mjs';
 
 const HANDLED = ['record', 'world-record', 'attempt', 'rejected'];
 const repo = process.env.GITHUB_REPOSITORY;
@@ -28,7 +28,9 @@ let changed = false;
 for (const issue of openIssues()) {
   let result;
   try {
-    result = await processSubmission(extractJson(issue.body ?? ''), { author: issue.user?.login, issue: issue.number, ts: new Date().toISOString() });
+    const sub = extractJson(issue.body ?? '');
+    const who = await resolveAuthor(sub, issue.user?.login);
+    result = await processSubmission(sub, { ...who, issue: issue.number, ts: new Date().toISOString() });
   } catch (e) {
     result = { status: 'rejected', message: `Rejected: ${e.message}` };
   }

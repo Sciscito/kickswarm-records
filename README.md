@@ -66,6 +66,20 @@ Node's permission model: they can read their own folder and nothing else, cannot
 start processes. Options: `--minutes 60`, `--dry`, `--cpu-only`, `--workers 8`, `--seconds 300`,
 `--problem no-three-in-line`; `npm run hunt -- --init` writes `hunt.config.json` (workers, quotas).
 
+## No accounts, no keys, no copy-paste
+
+- **Identity without accounts:** each device creates a signing key and you pick a hunter name. Records
+  are signed; the first key to use a name owns it.
+- **Submitting without GitHub:** a small relay (`relay/`, a free Cloudflare Worker) checks the signature
+  and files the solution for you. The project owner deploys it once; see `relay/README.md`. Until then,
+  the site falls back to a prefilled GitHub form (the signature still keeps your hunter name).
+- **AI without a key:** in the browser hive, “On-device model” downloads a small coding model (about
+  1 GB, once) that runs on your graphics chip with WebGPU. On a computer, “Install it for me” sets up
+  Ollama and qwen2.5-coder 7B.
+- **Your everyday AI as a hunter:** `scripts/mcp.mjs` is an MCP server. Connect it (one button for Claude
+  Desktop in the dashboard; `claude mcp add kickswarm -- node <folder>/scripts/mcp.mjs` for Claude Code)
+  and ask your assistant for a Kickswarm mission: it fetches, searches, checks and, with your yes, submits.
+
 ## How it works
 
 - `problems/<id>/judge.mjs`: the judges. Exact decimal arithmetic; the same code runs in the browser

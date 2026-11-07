@@ -120,15 +120,14 @@ function hydrate() {
   app.querySelectorAll('[data-art]').forEach((el) => observer.observe(el));
 }
 
-/** Open the GitHub form prefilled with a solution (or copy it when it is too long for a link). */
+/** Sign the solution with this device's hunter key and send it (relay, or a prefilled GitHub form). */
 async function submitUrl(sub) {
-  const json = JSON.stringify(sub);
-  const base = `https://github.com/${DATA.config.repo}/issues/new?template=solution.yml&title=${encodeURIComponent(`[solution] ${sub.problem} n=${sub.case}`)}`;
-  const full = `${base}&solution=${encodeURIComponent(json)}`;
-  if (full.length < 7500) window.open(full, '_blank', 'noopener');
-  else {
-    await copy(json, 'Solution copied: paste it in the form');
-    window.open(base, '_blank', 'noopener');
+  try {
+    const { sendSolution } = await import('./identity.mjs');
+    const url = await sendSolution(sub, { relay: DATA.config.relay, repo: DATA.config.repo, copy, toast });
+    if (url) window.open(url, '_blank', 'noopener');
+  } catch (e) {
+    toast(e.message);
   }
 }
 

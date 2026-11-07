@@ -1,0 +1,8 @@
+name = "kickswarm-records-relay"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+REPO = "Sciscito/kickswarm-records"
+ALLOWED_ORIGIN = "https://sciscito.github.io"
+# GITHUB_TOKEN is a secret: npx wrangler secret put GITHUB_TOKEN

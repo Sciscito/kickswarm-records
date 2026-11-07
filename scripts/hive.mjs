@@ -14,6 +14,7 @@ import { PROVIDERS, listModels } from '../lib/llm.mjs';
 import { fromPreset, PRESETS, ruleCommand } from '../lib/presets.mjs';
 import { complete, cpuCount, inventory, loadEnvFile } from '../lib/providers.mjs';
 import { clean, commandPrompt, loadSettings, saveSettings } from '../lib/settings.mjs';
+import { fingerprint, newIdentity } from '../lib/keys.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 process.chdir(ROOT);
@@ -39,7 +40,13 @@ const publicInventory = () => ({
   missing: inv.missing,
   sources: inv.sources.map(({ key, tier, kind, label, model, models, masked }) => ({ key, tier, kind, label, model, models: (models ?? []).slice(0, 15), masked })),
 });
-const state = () => ({ settings, presets: PRESETS, inventory: publicInventory(), hive: hive.snapshot(), providers: PROVIDERS, cores, root: ROOT, schedule: scheduleStatus() });
+let identity = null;
+async function loadIdentity() {
+  const f = join(ROOT, 'hunts', 'identity.json');
+  if (existsSync(f)) { const id = JSON.parse(readFileSync(f, 'utf8')); identity = { name: id.name, fp: await fingerprint(id.publicKey) }; }
+}
+await loadIdentity();
+const state = () => ({ settings, presets: PRESETS, inventory: publicInventory(), hive: hive.snapshot(), providers: PROVIDERS, cores, root: ROOT, schedule: scheduleStatus(), identity });
 
 // ---------- the OS scheduled task (created only when the person asks for it) ----------
 const TASK = 'Kickswarm Hive';
@@ -76,6 +83,54 @@ function removeSchedule() {
     spawnSync('crontab', ['-'], { input: (cur.stdout ?? '').split('\n').filter((l) => l && !l.includes('kickswarm-hive')).join('\n') + '\n' });
   }
   return 'Scheduled task removed.';
+}
+
+
+// ---------- one-click installs (each runs only after the person confirms in the page) ----------
+const has = (cmd) => spawnSync(process.platform === 'win32' ? 'where' : 'which', [cmd], { encoding: 'utf8' }).status === 0;
+let installing = false;
+function runStep(cmd, args) {
+  return new Promise((resolve) => {
+    hive.log(`$ ${cmd} ${args.join(' ')}`);
+    const child = spawn(cmd, args, { shell: process.platform === 'win32', windowsHide: true });
+    const out = (d) => String(d).split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(-2).forEach((l) => hive.log(l.slice(0, 160)));
+    child.stdout.on('data', out);
+    child.stderr.on('data', out);
+    child.on('close', (code) => resolve(code));
+    child.on('error', () => resolve(1));
+  });
+}
+async function installOllama() {
+  if (installing) throw new Error('an install is already running');
+  installing = true;
+  try {
+    if (!has('ollama')) {
+      if (process.platform === 'win32' && has('winget')) await runStep('winget', ['install', '-e', '--id', 'Ollama.Ollama', '--source', 'winget']);
+      else if (process.platform === 'darwin' && has('brew')) await runStep('brew', ['install', 'ollama']);
+      else { hive.log('Please install Ollama from https://ollama.com/download, then press the button again.'); return; }
+    }
+    const ollama = has('ollama') ? 'ollama' : process.platform === 'win32' ? `${process.env.LOCALAPPDATA}\\Programs\\Ollama\\ollama.exe` : 'ollama';
+    const code = await runStep(ollama, ['pull', 'qwen2.5-coder:7b']);
+    hive.log(code === 0 ? 'Local model ready: qwen2.5-coder:7b. It now appears in your sources.' : 'The model download did not finish; press the button again to resume.');
+    await refreshInventory();
+    send('state', hive.snapshot());
+  } finally {
+    installing = false;
+  }
+}
+function claudeDesktopConfig() {
+  return process.platform === 'win32' ? join(process.env.APPDATA ?? '', 'Claude', 'claude_desktop_config.json') : process.platform === 'darwin' ? join(process.env.HOME ?? '', 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json') : join(process.env.HOME ?? '', '.config', 'Claude', 'claude_desktop_config.json');
+}
+function connectClaudeDesktop() {
+  const f = claudeDesktopConfig();
+  let cfg = {};
+  if (existsSync(f)) {
+    cfg = JSON.parse(readFileSync(f, 'utf8'));
+    writeFileSync(`${f}.kickswarm-backup`, JSON.stringify(cfg, null, 2));
+  }
+  cfg.mcpServers = { ...(cfg.mcpServers ?? {}), kickswarm: { command: process.execPath, args: [join(ROOT, 'scripts', 'mcp.mjs')] } };
+  writeFileSync(f, JSON.stringify(cfg, null, 2));
+  return `Kickswarm is connected to Claude Desktop (${f}; the previous file is saved next to it as .kickswarm-backup). Restart Claude Desktop, then ask it: "get me a Kickswarm mission".`;
 }
 
 // ---------- keys (stored in .env.local, on this machine only) ----------
@@ -128,6 +183,16 @@ createServer(async (req, res) => {
         if (b.key) await listModels(b.provider, b.key).catch((e) => { throw new Error(`the key did not work: ${e.message}`); });
         saveKey(p.env, b.key ? String(b.key).trim() : '');
         await refreshInventory();
+      } else if (url.pathname === '/api/identity') {
+        if (existsSync(join(ROOT, 'hunts', 'identity.json'))) return json(res, 400, { error: 'this computer already has a hunter identity' });
+        const id = await newIdentity(String(b.name ?? ''));
+        writeFileSync(join(ROOT, 'hunts', 'identity.json'), JSON.stringify(id));
+        await loadIdentity();
+      } else if (url.pathname === '/api/install/ollama') {
+        installOllama().catch((e) => hive.log(`install: ${e.message}`));
+        return json(res, 200, { ...state(), message: 'Installing in the background: follow it in the activity log.' });
+      } else if (url.pathname === '/api/connect/claude-desktop') {
+        return json(res, 200, { ...state(), message: connectClaudeDesktop() });
       } else if (url.pathname === '/api/inventory') {
         await refreshInventory();
       } else if (url.pathname === '/api/start') {

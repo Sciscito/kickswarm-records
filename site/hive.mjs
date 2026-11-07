@@ -11,6 +11,7 @@ import { fromPreset, inWindow, PRESETS, ruleCommand } from './lib/presets.mjs';
 import { extractSearcher, searcherPrompt } from './lib/searchgen.mjs';
 import { agentSetupPrompt } from './lib/agentprompt.mjs';
 import { BEE, icon } from './icons.mjs';
+import { createIdentity, identitySummary } from './identity.mjs';
 
 const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
 
@@ -42,6 +43,9 @@ function localBackend(token) {
     stop: (now) => api('stop', { now }),
     schedule: (install) => api('schedule', { install }),
     command: (text) => api('command', { text }),
+    identity: (name) => api('identity', { name }),
+    installOllama: () => api('install/ollama', {}),
+    connectClaude: () => api('connect/claude-desktop', {}),
     events(on) {
       const es = new EventSource(`/api/events?t=${token}`);
       for (const ev of ['log', 'state', 'improve', 'stats']) es.addEventListener(ev, (e) => on(ev, JSON.parse(e.data)));
@@ -72,8 +76,33 @@ function browserBackend(DATA) {
   const save = () => { store.set('ks-hive-settings', settings); store.set('ks-hive-stats', stats); store.set('ks-hive-usage', usage); store.set('ks-hive-improvements', improvements.slice(-100)); store.set('ks-hive-library', library.slice(-40)); };
   const snapshot = () => ({ running, stopping, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
 
+  // An AI model running on this device's graphics chip (WebGPU): no key, no account, free.
+  // Downloaded once (about 1 GB) after the person asks for it, then cached by the browser.
+  const WEBLLM = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/+esm';
+  let engine = null;
+  async function webllmModel() {
+    const lib = await import(WEBLLM);
+    const ids = lib.prebuiltAppConfig.model_list.map((m) => m.model_id);
+    const prefs = [/Qwen2\.5-Coder-1\.5B.*q4f16_1/i, /Qwen3-1\.7B.*q4f16_1/i, /Qwen2\.5-1\.5B.*q4f16_1/i];
+    for (const re of prefs) { const m = ids.find((x) => re.test(x)); if (m) return m; }
+    return ids.find((x) => /q4f16_1/.test(x)) ?? ids[0];
+  }
+  async function webllmCall(model, prompt) {
+    if (!engine) {
+      const lib = await import(WEBLLM);
+      log(`Loading the on-device model ${model} (first time: a download of about 1 GB)…`);
+      engine = await lib.CreateMLCEngine(model, { initProgressCallback: (p) => emit('state', { ...snapshot(), loading: p.text }) });
+      log('On-device model ready.');
+    }
+    const r = await engine.chat.completions.create({ messages: [{ role: 'user', content: prompt }], temperature: 0.7 });
+    return r.choices?.[0]?.message?.content ?? '';
+  }
+  const askModel = (src, prompt, opts) => (src.kind === 'webllm' ? webllmCall(src.model, prompt) : callModel(src, prompt, opts));
+
   async function discover() {
     const out = [];
+    const local = store.get('ks-webllm', null);
+    if (local && navigator.gpu) out.push({ key: `webllm:${local}`, tier: 'local', kind: 'webllm', model: local, label: `On this device (WebGPU, ${local.split('-').slice(0, 3).join('-')})` });
     for (const [id, key] of Object.entries(keys)) {
       if (!key || !PROVIDERS[id]) continue;
       try {
@@ -83,8 +112,10 @@ function browserBackend(DATA) {
     }
     sources = out;
   }
+  let ident = null;
+  identitySummary().then((x) => { ident = x; });
   const publicState = () => ({
-    settings, presets: PRESETS, providers: PROVIDERS, cores,
+    settings, presets: PRESETS, providers: PROVIDERS, cores, identity: ident,
     inventory: {
       machine: { cores, memoryGb: navigator.deviceMemory ?? null, platform: navigator.userAgentData?.platform ?? navigator.platform, browser: true },
       sources: sources.map(({ key, tier, kind, label, model, models, masked }) => ({ key, tier, kind, label, model, models, masked })),
@@ -142,7 +173,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
           const parentCode = parent?.code ?? (await fetch(builtinUrl(p.id)).then((r) => r.text()));
           note(src.key, 'calls');
           (usage[today()] ??= {})[src.key] = (usage[today()][src.key] ?? 0) + 1;
-          const code = extractSearcher(await callModel(src, searcherPrompt(m, parentCode, parent ? `from your library: ${parent.wins} record(s), by ${parent.source}` : 'the built-in searcher'), { browser: true }));
+          const code = extractSearcher(await askModel(src, searcherPrompt(m, parentCode, parent ? `from your library: ${parent.wins} record(s), by ${parent.source}` : 'the built-in searcher'), { browser: true }));
           if (!code) throw new Error('no usable searcher in the answer');
           prog = { code, source: src.key, entry: { id: Date.now().toString(36), problem: p.id, code, source: src.key, wins: 0, valid: 0 } };
           log(`${src.label} wrote a searcher`, i);
@@ -204,7 +235,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
 
   return {
     mode: 'browser',
-    async state() { if (!sources.length && Object.keys(keys).length) await discover(); return publicState(); },
+    async state() { if (!sources.length) await discover(); return publicState(); },
     async preset(name) { settings = { ...fromPreset(name, cores), workers: Math.max(1, Math.min(cores - 1 || 1, Math.round(cores * PRESETS[name].cores))), disabled: settings.disabled, problems: settings.problems }; save(); return publicState(); },
     async settings(s) { settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) } }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); save(); return publicState(); },
     async key(provider, key) {
@@ -216,6 +247,15 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
       return publicState();
     },
     async refresh() { await discover(); return publicState(); },
+    async webllm(on) {
+      if (on) {
+        if (!navigator.gpu) throw new Error('This browser has no WebGPU: use a recent Chrome or Edge, or add a free key instead.');
+        store.set('ks-webllm', await webllmModel());
+      } else { store.set('ks-webllm', null); engine = null; }
+      await discover();
+      return publicState();
+    },
+    async identity(name) { await createIdentity(name); ident = await identitySummary(); return publicState(); },
     async start() { if (!running) run(); return publicState(); },
     async stop(now) { stopping = true; if (now) workers.forEach((w) => w.terminate()); emit('state', snapshot()); return publicState(); },
     async schedule() { throw new Error('Scheduled nights need the hive on a computer (npm run hive). In the browser, the hive runs while this tab is open.'); },
@@ -223,7 +263,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
       const src = sources.find(allowed);
       if (src) {
         try {
-          const out = await callModel(src, `You configure a personal hive. Current settings: ${JSON.stringify(settings)}. Fields: workers (1..${cores}), seconds (20..3600), tiers {local,free,paid,sub: bool}, quotas {...: calls/day}, schedule {enabled, from "HH:MM", to "HH:MM"}, problems (subset of ["circles-in-square","circles-in-circle","no-three-in-line"]). The person said: ${JSON.stringify(text)}. Reply ONLY with JSON {"patch": {fields to change}, "explain": "one short sentence in their language"}.`, { browser: true, timeoutMs: 60000 });
+          const out = await askModel(src, `You configure a personal hive. Current settings: ${JSON.stringify(settings)}. Fields: workers (1..${cores}), seconds (20..3600), tiers {local,free,paid,sub: bool}, quotas {...: calls/day}, schedule {enabled, from "HH:MM", to "HH:MM"}, problems (subset of ["circles-in-square","circles-in-circle","no-three-in-line"]). The person said: ${JSON.stringify(text)}. Reply ONLY with JSON {"patch": {fields to change}, "explain": "one short sentence in their language"}.`, { browser: true, timeoutMs: 60000 });
           const j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
           return { patch: j.patch, explain: j.explain, by: src.label };
         } catch {}
@@ -282,17 +322,21 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
           <label class="num">workers <input type="range" min="1" max="${st.cores}" value="${s.workers}" id="workers"><output>${s.workers}</output></label></div>
         ${['local', 'free', 'paid', 'sub'].map((t) => `
           <div class="tier"><label class="switch"><input type="checkbox" data-tier="${t}" ${s.tiers?.[t] !== false ? 'checked' : ''}><span></span></label><b>${TIER_LABEL[t]}</b><small>${s.quotas?.[t] ?? 0} calls/day per source</small></div>
-          ${srcByTier(t).map((x) => `<div class="src ${on(x) ? 'on' : ''}"><label class="switch"><input type="checkbox" data-src="${esc(x.key)}" ${!(s.disabled ?? []).includes(x.key) ? 'checked' : ''}><span></span></label><div><b>${esc(x.label)}</b><small>${h.usage?.[x.key] ?? 0} calls today${x.masked ? ` · key ${esc(x.masked)}` : ''}${h.stats?.[x.key] ? ` · ${h.stats[x.key].improved} record(s) from ${h.stats[x.key].calls} call(s)` : ''}</small></div>${x.masked ? `<button class="btn small" data-forget="${esc(x.key.split(':')[0])}">Forget key</button>` : ''}</div>`).join('')}`).join('')}
+          ${srcByTier(t).map((x) => `<div class="src ${on(x) ? 'on' : ''}"><label class="switch"><input type="checkbox" data-src="${esc(x.key)}" ${!(s.disabled ?? []).includes(x.key) ? 'checked' : ''}><span></span></label><div><b>${esc(x.label)}</b><small>${h.usage?.[x.key] ?? 0} calls today${x.masked ? ` · key ${esc(x.masked)}` : ''}${h.stats?.[x.key] ? ` · ${h.stats[x.key].improved} record(s) from ${h.stats[x.key].calls} call(s)` : ''}</small></div>${x.masked ? `<button class="btn small" data-forget="${esc(x.key.split(':')[0])}">Forget key</button>` : ''}${x.kind === 'webllm' ? '<button class="btn small" id="webllm-off">Remove</button>' : ''}</div>`).join('')}`).join('')}
         <details class="add"><summary>Add a source</summary>
           <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider. ${local ? '' : 'They are never given to the search programs.'}</p>
+          ${!local && !inv.sources.some((x) => x.kind === 'webllm') ? `<div class="addrow"><b>On-device model (free, no key)</b><small>${navigator.gpu ? 'Runs on this device’s graphics chip. Downloads about 1 GB once, then works offline. Best on a computer or a recent phone, on Wi-Fi.' : 'Needs WebGPU (recent Chrome or Edge). Not available in this browser.'}</small>${navigator.gpu ? '<div class="addkey"><button class="btn small" id="webllm-on">Download and use</button></div>' : ''}</div>` : ''}
           ${Object.entries(st.providers).map(([id, p]) => inv.sources.some((x) => x.key.startsWith(`${id}:`)) ? '' : `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`).join('')}
-          ${local ? (inv.missing ?? []).filter((m) => m.key.startsWith('cli:') || m.key === 'ollama').map((m) => `<div class="addrow"><b>${esc(m.label)}</b><small>${esc(m.how)}</small></div>`).join('') : '<div class="addrow"><b>Local models and subscriptions</b><small>Ollama, Claude Code, Codex and Gemini CLI work with the hive on a computer (npm run hive).</small></div>'}
+          ${local && !inv.sources.some((x) => x.kind === 'ollama') ? '<div class="addrow"><b>A free local model, one click</b><small>Installs Ollama (free, open source) and a coding model, qwen2.5-coder 7B (about 5 GB). Runs on your computer, no key, no account.</small><div class="addkey"><button class="btn small" id="ollama-install">Install it for me</button></div></div>' : ''}
+          ${local ? '<div class="addrow"><b>Your everyday AI as a hunter</b><small>Connects Kickswarm to Claude Desktop: ask it “get me a Kickswarm mission” and it hunts, checks and submits by itself (it asks you before submitting).</small><div class="addkey"><button class="btn small" id="claude-connect">Connect to Claude Desktop</button></div></div>' : ''}
+          ${local ? (inv.missing ?? []).filter((m) => m.key.startsWith('cli:')).map((m) => `<div class="addrow"><b>${esc(m.label)}</b><small>${esc(m.how)}</small></div>`).join('') : '<div class="addrow"><b>Local models and subscriptions</b><small>Ollama, Claude Code, Codex and Gemini CLI work with the hive on a computer (npm run hive).</small></div>'}
         </details>
         ${local && inv.tools?.length ? `<p class="hint">Tools your agents already have (MCP): ${inv.tools.map((t) => esc(t.name)).join(', ')}. The hive does not use them for searching; the setup prompt below may.</p>` : ''}
       </section>
 
       <section class="panel">
         <h3>Rules</h3>
+        <div class="row">${st.identity ? `Hunter <b>${esc(st.identity.name)}</b> <small class="hint mono">key ${esc(st.identity.fp)}</small>` : `<span>Your hunter name</span> <input id="hname" placeholder="e.g. kev" maxlength="24" style="background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px"> <button class="btn small" id="hsave">Save</button><small class="hint">No account: this device gets a key that signs your records.</small>`}</div>
         <label class="row">Minutes per search <input type="number" min="1" max="60" value="${Math.round((s.seconds ?? 120) / 60) || 1}" id="minutes"></label>
         ${['local', 'free', 'paid', 'sub'].map((t) => `<label class="row">${TIER_LABEL[t]}: calls per day <input type="number" min="0" max="100000" value="${s.quotas?.[t] ?? 0}" data-quota="${t}"></label>`).join('')}
         <div class="row"><label class="switch"><input type="checkbox" id="sched" ${s.schedule?.enabled ? 'checked' : ''}><span></span></label> Only between <input type="time" id="from" value="${esc(s.schedule?.from ?? '23:00')}"> and <input type="time" id="to" value="${esc(s.schedule?.to ?? '07:00')}"></div>
@@ -305,6 +349,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     <div class="two" style="margin-top:24px">
       <section class="panel">
         <h3>Right now</h3>
+        ${h.loading ? `<p class="hint">${esc(h.loading)}</p>` : ''}
         <div class="slots">${h.active?.length ? h.active.map((a) => `<div class="slotcard"><b>#${a.slot + 1}</b> ${a.phase === 'writing' ? `${icon('pen')} ${esc(a.source)} writes a searcher` : `${icon('search')} ${esc(DATA.problems.find((p) => p.id === a.problem)?.title)}, n = ${esc(a.case)}`}${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div>` : ''}</div>`).join('') : `<p class="empty">${h.running ? 'Starting…' : 'Idle. Press Start.'}</p>`}</div>
         <ul class="feed hivelog" id="log">${logLines.slice(0, 40).map((l) => `<li><time>${l.t.slice(11, 19)}</time> ${l.slot === null ? '' : `<b>#${l.slot + 1}</b> `}${esc(l.msg)}</li>`).join('')}</ul>
       </section>
@@ -335,6 +380,17 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       }
       apply(() => be.start());
     };
+    $('#ollama-install')?.addEventListener('click', async () => {
+      if (!confirm('Install Ollama and download the qwen2.5-coder 7B model (about 5 GB) on this computer?')) return;
+      try { const r = await be.installOllama(); st = r; render(); toast(r.message); } catch (e) { toast(e.message); }
+    });
+    $('#claude-connect')?.addEventListener('click', async () => {
+      if (!confirm('Add Kickswarm to Claude Desktop\'s connectors? Your current settings file is backed up first.')) return;
+      try { const r = await be.connectClaude(); st = r; render(); toast(r.message); } catch (e) { toast(e.message); }
+    });
+    $('#webllm-on')?.addEventListener('click', () => { if (confirm('Download a free AI model to this device (about 1 GB, once)? It runs locally; nothing is sent anywhere.')) apply(() => be.webllm(true)); });
+    $('#webllm-off')?.addEventListener('click', () => apply(() => be.webllm(false)));
+    $('#hsave')?.addEventListener('click', () => { const v = $('#hname').value.trim(); if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,23}$/.test(v)) return toast('2 to 24 letters, digits, - or _'); apply(() => be.identity(v)); });
     $('#autosub')?.addEventListener('change', (e) => patch({ submit: e.target.checked ? 'improvements' : 'none' }));
     app.querySelectorAll('[data-preset]').forEach((b) => (b.onclick = () => apply(() => be.preset(b.dataset.preset))));
     const w = $('#workers');
