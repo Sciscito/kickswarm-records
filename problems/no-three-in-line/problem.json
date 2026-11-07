@@ -508,5 +508,21 @@
       "max": "160",
       "world": null
     }
-  ]
+  ],
+  "about": {
+    "what": "Put as many dots as possible on an n by n grid so that no three of them are ever on the same straight line, in any direction. Each row can hold two dots at most, so 2n is the ceiling.",
+    "why": "A famous open question in combinatorics, posed by Henry Dudeney in 1917. Mathematicians believe that for large grids 2n becomes impossible, but nobody has proven where it stops.",
+    "impact": "Real but specialised: perfect solutions are known up to n = 60. Finding one for n = 61 or more would be a genuine new mathematical result.",
+    "fun": "A 2026 constraint-programming study pushed the frontier from 46 to 60; the next step is up for grabs.",
+    "links": [
+      [
+        "Prellberg (2026), arXiv:2602.07751",
+        "https://www.arxiv.org/abs/2602.07751"
+      ],
+      [
+        "OEIS A000769",
+        "https://oeis.org/A000769"
+      ]
+    ]
+  }
 }

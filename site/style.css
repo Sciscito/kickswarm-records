@@ -567,3 +567,30 @@ body.is-home.scrolled .top { background: color-mix(in srgb, var(--bg) 88%, trans
 .medal.has.r-rare { border-color: color-mix(in srgb, #3d6fd1 50%, var(--line)); }
 .medals.hall { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
 .medal .who a { color: var(--honey); }
+
+/* ===== Players ===== */
+.psearch input { width: 100%; background: var(--bg2); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 14px 20px; font: 16px var(--sans); }
+.psearch input:focus { outline: 2px solid var(--honey); outline-offset: 1px; }
+.plist { display: grid; gap: 8px; margin-top: 10px; }
+.pcard { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--card) 88%, transparent); color: var(--ink); transition: border-color .2s, transform .2s; }
+.pcard:hover { border-color: var(--honey); transform: translateX(2px); text-decoration: none; }
+.pcard.me { border-color: color-mix(in srgb, var(--honey) 60%, var(--line)); }
+.phex { width: 42px; height: 48px; clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); background: linear-gradient(160deg, var(--honey), #8a5a00); display: grid; place-items: center; }
+.phex span { font: 400 16px var(--serif); color: #1a1206; }
+.pinfo { display: grid; min-width: 0; }
+.pinfo b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinfo small { color: var(--faint); font-size: 12px; }
+.pval { text-align: right; font-size: 20px; color: var(--honey); display: grid; }
+.pval i { font-style: normal; color: var(--faint); font-size: 11px; }
+.pval small { color: var(--faint); font: 11px var(--sans); }
+.featcap { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 8px; font-size: 13px; }
+
+/* ===== Learn more sheet ===== */
+.sheet-wrap { position: fixed; inset: 0; z-index: 50; background: color-mix(in srgb, #000 60%, transparent); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: fade .2s; }
+@keyframes fade { from { opacity: 0; } }
+.sheet { position: relative; width: min(680px, 100%); max-height: 88vh; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 28px 28px 24px; box-shadow: 0 40px 120px -40px var(--honey); }
+.sheet h3 { font-weight: 400; font-size: 18px; color: var(--honey); margin: 18px 0 4px; }
+.sheet p, .sheet li { color: var(--dim); }
+.sheet .fun { margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--honey) 10%, transparent); color: var(--ink); }
+.sheet .fun .ic { color: var(--honey); }
+.sheet-x { position: absolute; top: 14px; right: 14px; background: transparent; border: 1px solid var(--line); color: var(--dim); border-radius: 50%; width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; }

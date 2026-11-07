@@ -205,7 +205,7 @@ function home() {
           <h3 class="h3big">${esc(p.title)}</h3>
           <p class="lead">${esc(pitch[p.id] ?? p.tagline)}</p>
           <ul class="facts-inline mono"><li>${p.cases.length} cases</li><li>n = ${p.cases[0].n}–${p.cases.at(-1).n}</li><li>${esc(p.score_name)}</li></ul>
-          <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Hunt it ${icon('arrow')}</a><a class="btn ghost" href="#/p/${p.id}">See the board</a></div>
+          <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Hunt it ${icon('arrow')}</a><button class="btn ghost" data-learnp="${p.id}">Learn more</button><a class="btn ghost" href="#/p/${p.id}">See the board</a></div>
         </div>
       </article>`).join('')}
   </section>
@@ -314,6 +314,7 @@ function home() {
     <div class="cta-row" style="justify-content:center"><a class="btn primary big" href="#/hive">Join the swarm ${icon('arrow')}</a></div>
   </section>`;
   hydrate();
+  app.querySelectorAll('[data-learnp]').forEach((b) => (b.onclick = () => learnProblem(problem(b.dataset.learnp))));
   stopHero?.();
   import('./hero.mjs').then((m) => { stopHero = m.startHero(document.getElementById('swarm')); });
   fetch('catalogue.json').then((r) => r.json()).then((cat) => {
@@ -337,7 +338,7 @@ function problemPage(pid) {
   <p class="crumbs"><a href="#/">Hunts</a> / ${esc(p.title)}</p>
   <h1>${esc(p.title)}</h1>
   <p class="lead" style="max-width:46em;color:var(--dim)">${esc(p.statement)}</p>
-  <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Mission on this hunt →</a><a class="btn" href="${esc(p.world_source.url)}" target="_blank" rel="noopener">Reference table ↗</a></div>
+  <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Mission on this hunt →</a><button class="btn" id="learn">${icon('telescope')} Learn more</button><a class="btn" href="${esc(p.world_source.url)}" target="_blank" rel="noopener">Reference table ↗</a></div>
   <div class="legend">${['reference', 'valid', 'swarm', 'perfect', 'world'].filter((t) => t !== 'perfect' || p.id === 'no-three-in-line').filter((t) => t !== 'reference' || p.id !== 'no-three-in-line').map(tierBadge).join('')}${p.id === 'no-three-in-line' ? tierBadge(null) : ''}</div>
   <div class="cases">
     ${p.cases.map((c) => {
@@ -347,6 +348,7 @@ function problemPage(pid) {
     }).join('')}
   </div>`;
   hydrate();
+  document.getElementById('learn').onclick = () => learnProblem(p);
 }
 
 /** What a judged score would earn, mirroring the robot (lib/process.mjs). */
@@ -430,7 +432,7 @@ function casePage(pid, cid) {
     <div>${plate(pid, cid, 700, s.seq ?? '—', 'plate big')}</div>
     <div>
       <h1>${esc(p.title)}, <em>n</em> = ${c.n}</h1>
-      <div>${tierBadge(s.tier)}</div>
+      <div class="cta-row" style="margin:0 0 6px">${tierBadge(s.tier)}<button class="btn small" id="learn">${icon('telescope')} What is this?</button></div>
       <dl class="facts">
         <dt>Current best</dt><dd>${s.score ? `${esc(shortScore(s.score))} · ${s.credit ? `${esc(s.credit)} (found by @${esc(s.author)})` : `@${esc(s.author)}`}` : 'none yet'}</dd>
         <dt>World record</dt><dd>${esc(worldLine)}</dd>
@@ -447,6 +449,7 @@ function casePage(pid, cid) {
   hydrate();
   wireSubmit(p, c, s);
   wireShare();
+  document.getElementById('learn').onclick = () => learnProblem(p);
 }
 
 function missionPage(only, onlyCase) {
@@ -595,11 +598,16 @@ async function catalogue() {
           <p>${esc(h.why)}</p>
           <div class="hstats"><span title="Difficulty">Difficulty <b class="stars">${stars(h.difficulty)}</b></span><span title="Impact">Impact <b class="stars imp">${stars(h.impact)}</b></span></div>
           <p class="ver"><b>Verified:</b> ${esc(h.verify)}</p>
-          ${h.link ? `<a class="btn primary small" href="${esc(h.link.replace('#/p/', '#/mission/'))}">Hunt it ${icon('arrow')}</a>` : ''}
+          <div class="cta-row" style="margin-top:auto">${h.link ? `<a class="btn primary small" href="${esc(h.link.replace('#/p/', '#/mission/'))}">Hunt it ${icon('arrow')}</a>` : ''}<button class="btn small" data-learn="${esc(h.title)}">Learn more</button></div>
         </div>
       </article>`;
     }).join('') || '<p class="empty">No hunt matches these filters.</p>';
     hydrate();
+    app.querySelectorAll('[data-learn]').forEach((b) => (b.onclick = () => {
+      const h = cat.hunts.find((x) => x.title === b.dataset.learn);
+      const live = h.link?.startsWith('#/p/') ? problem(h.link.split('/')[2]) : null;
+      learnMore({ ...h, about: live?.about, go: h.link ? h.link.replace('#/p/', '#/mission/') : null });
+    }));
   };
   const chips = (id, key) => app.querySelectorAll(`#${id} .chip`).forEach((b) => (b.onclick = () => { app.querySelectorAll(`#${id} .chip`).forEach((x) => x.classList.remove('on')); b.classList.add('on'); state[key] = b.dataset.v; draw(); }));
   chips('f-domain', 'domain');
@@ -622,6 +630,7 @@ function hunterPage(author) {
       <p class="kicker mono">Hunter${rank >= 0 ? ` · rank ${rank + 1} of ${DATA.leaderboard.length}` : ''}</p>
       <h1>@${esc(author)}</h1>
       <p class="mono hunter-stats"><b>${lb?.honey ?? 0}</b> honey · <b>${mine.length}</b> card${mine.length === 1 ? '' : 's'} · <a href="https://github.com/${esc(author)}" target="_blank" rel="noopener">GitHub ↗</a></p>
+      <div class="cta-row" style="margin-top:6px"><button class="btn small" id="follow">${amis().includes(author) ? 'Following ✓' : 'Follow'}</button>${moi() === author ? '<span class="badge t-swarm">This is you</span>' : '<button class="btn small" id="itsme">This is me</button>'}<a class="btn small" href="#/players">All players</a></div>
     </div>
   </div>
   <h3 style="margin:18px 0 10px">Medals <small class="hint">${(DATA.badges?.[author] ?? []).length} of ${BADGES.length}</small></h3>
@@ -630,6 +639,13 @@ function hunterPage(author) {
   <div class="rarity big">${Object.entries(tiers).map(([t, k]) => `<span class="rar ${k ? '' : 'none'}">${tierBadge(t)} <b class="mono">${k}</b></span>`).join('')}</div>
   ${mine.length ? `<div class="gallery">${mine.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">No card yet. <a href="#/hive">Start your hive</a>.</p>'}`;
   wireShare();
+  document.getElementById('follow').onclick = () => {
+    const f = amis();
+    local.set('ks-friends', f.includes(author) ? f.filter((x) => x !== author) : [...f, author]);
+    hunterPage(author);
+    toast(f.includes(author) ? `Unfollowed @${author}` : `Following @${author}`);
+  };
+  document.getElementById('itsme')?.addEventListener('click', () => { local.set('ks-me', author); hunterPage(author); toast('Saved on this device: this is you'); });
 }
 
 /** Open data: what is published and how to use it. */
@@ -802,6 +818,122 @@ function statsPage() {
   </section>`;
 }
 
+// ---------- players: me, friends, search, leaderboards, best feats ----------
+const local = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+/** Who "me" is on this device: chosen with "This is me", else the device's hunter name. */
+function moi() {
+  return local.get('ks-me', null) ?? local.get('ks-identity', null)?.name ?? null;
+}
+const amis = () => local.get('ks-friends', []);
+
+/** Every hunter with their numbers, from the site data. */
+function joueurs() {
+  const by = new Map();
+  const get = (a) => by.get(a) ?? by.set(a, { author: a, honey: 0, records: 0, world: 0, perfect: 0, medals: 0, best: null }).get(a);
+  for (const l of DATA.leaderboard) Object.assign(get(l.author), { honey: l.honey, records: l.records });
+  for (const t of DATA.trophies) {
+    const j = get(t.author);
+    if (t.tier === 'world') j.world++;
+    if (t.tier === 'perfect') j.perfect++;
+    const rank = { world: 4, perfect: 3, swarm: 2, known: 1, valid: 0 }[t.tier] ?? 0;
+    if (!j.best || rank > j.best.rank) j.best = { ...t, rank };
+  }
+  for (const [a, l] of Object.entries(DATA.badges ?? {})) get(a).medals = l.length;
+  return [...by.values()];
+}
+
+function carteJoueur(j, rang) {
+  const me = moi() === j.author;
+  return `<a class="pcard ${me ? 'me' : ''}" href="#/u/${esc(j.author)}">
+    <span class="phex"><span>${esc(j.author.slice(0, 2).toUpperCase())}</span></span>
+    <span class="pinfo"><b>@${esc(j.author)}${me ? ' <small class="badge t-swarm">you</small>' : ''}</b><small>${j.records} record(s) · ${j.medals} medal(s)${j.world ? ` · ${j.world} world` : ''}${j.perfect ? ` · ${j.perfect} perfect` : ''}</small></span>
+    <span class="pval mono">${rang ? `<i>#${rang}</i>` : ''}${j.honey}<small>honey</small></span>
+  </a>`;
+}
+
+function playersPage() {
+  const all = joueurs();
+  const me = moi();
+  const meJ = all.find((j) => j.author === me);
+  const friends = amis().map((a) => all.find((j) => j.author === a) ?? { author: a, honey: 0, records: 0, world: 0, perfect: 0, medals: 0 });
+  const boards = {
+    honey: ['Honey', (j) => j.honey],
+    records: ['Records', (j) => j.records],
+    medals: ['Medals', (j) => j.medals],
+    elite: ['World & perfect', (j) => j.world * 100 + j.perfect],
+  };
+  const feats = DATA.trophies.slice().sort((a, b) => ({ world: 4, perfect: 3, swarm: 2, known: 1, valid: 0 }[b.tier] ?? 0) - ({ world: 4, perfect: 3, swarm: 2, known: 1, valid: 0 }[a.tier] ?? 0) || b.seq - a.seq).slice(0, 8);
+  app.innerHTML = `
+  <p class="kicker mono">Players</p>
+  <h1 class="h2big" style="margin-bottom:16px">The hunters.<br><em>You, your friends, the legends.</em></h1>
+  <div class="psearch"><input id="q" placeholder="Search a hunter by name…" autocomplete="off" aria-label="Search a hunter"><div id="results" class="plist"></div></div>
+
+  <div class="two" style="margin-top:22px">
+    <section class="panel">
+      <h3>You</h3>
+      ${me ? (meJ ? carteJoueur(meJ) : `<p class="empty">@${esc(me)} has no record yet. <a href="#/hive">Start your hive</a>.</p>`) : `<p class="empty">Not set on this device. Open your profile and press “This is me”, or start your hive to get a hunter name.</p>`}
+      ${me ? `<p style="margin-top:10px"><a class="btn small" href="#/u/${esc(me)}">My profile ${icon('arrow')}</a></p>` : ''}
+    </section>
+    <section class="panel">
+      <h3>Friends <small class="hint">${friends.length}</small></h3>
+      ${friends.length ? `<div class="plist">${friends.sort((a, b) => b.honey - a.honey).map((j) => carteJoueur(j)).join('')}</div>` : '<p class="empty">Follow hunters from their profile: they show up here, with their numbers next to yours.</p>'}
+    </section>
+  </div>
+
+  <section class="sec" style="padding-top:44px">
+    <p class="secno mono">Leaderboards</p>
+    <div class="chips" id="boards">${Object.entries(boards).map(([k, [l]], i) => `<button class="chip ${i ? '' : 'on'}" data-b="${k}">${l}</button>`).join('')}</div>
+    <div class="plist" id="board" style="margin-top:14px"></div>
+  </section>
+
+  <section class="sec" style="padding-top:44px">
+    <p class="secno mono">Best feats</p>
+    ${feats.length ? `<div class="gallery">${feats.map((t) => `<figure><a href="#/p/${esc(t.problem)}/${esc(t.case)}"><img loading="lazy" src="trophies/${t.seq}.svg" alt="${esc(TIERS[t.tier]?.label)} by @${esc(t.author)}"></a><figcaption class="featcap">${tierBadge(t.tier)} <a href="#/u/${esc(t.author)}">@${esc(t.author)}</a></figcaption></figure>`).join('')}</div>` : '<p class="empty">No feat yet.</p>'}
+  </section>`;
+  const drawBoard = (k) => {
+    const [, f] = boards[k];
+    document.getElementById('board').innerHTML = all.filter((j) => f(j) > 0).sort((a, b) => f(b) - f(a)).slice(0, 20).map((j, i) => carteJoueur(j, i + 1)).join('') || '<p class="empty">Nobody yet.</p>';
+  };
+  app.querySelectorAll('#boards .chip').forEach((b) => (b.onclick = () => { app.querySelectorAll('#boards .chip').forEach((x) => x.classList.remove('on')); b.classList.add('on'); drawBoard(b.dataset.b); }));
+  drawBoard('honey');
+  const q = document.getElementById('q');
+  q.oninput = () => {
+    const v = q.value.trim().toLowerCase();
+    document.getElementById('results').innerHTML = v ? all.filter((j) => j.author.toLowerCase().includes(v)).slice(0, 8).map((j) => carteJoueur(j)).join('') || '<p class="empty">No hunter by that name.</p>' : '';
+  };
+}
+
+/** "Learn more": a sheet explaining a hunt in plain words (what, why it matters, honest impact, how it is checked). */
+function learnMore(x) {
+  document.querySelector('.sheet-wrap')?.remove();
+  const a = x.about ?? {};
+  const w = document.createElement('div');
+  w.className = 'sheet-wrap';
+  w.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(x.title)}">
+    <button class="sheet-x" aria-label="Close">${icon('x')}</button>
+    <p class="kicker mono">Learn more</p>
+    <h2 class="h3big">${esc(x.title)}</h2>
+    ${a.what ? `<h3>What it is</h3><p>${esc(a.what)}</p>` : ''}
+    <h3>Why it matters</h3><p>${esc(a.why ?? x.why ?? '')}</p>
+    ${a.impact ? `<h3>What it would really bring</h3><p>${esc(a.impact)}</p>` : ''}
+    <h3>How it is checked</h3><p>${esc(x.verify ?? x.statement ?? '')}</p>
+    ${x.difficulty ? `<p class="hstats"><span>Difficulty <b class="stars">${'★'.repeat(x.difficulty)}<span class="off">${'★'.repeat(5 - x.difficulty)}</span></b></span><span>Impact <b class="stars imp">${'★'.repeat(x.impact)}<span class="off">${'★'.repeat(5 - x.impact)}</span></b></span></p>` : ''}
+    ${a.fun ? `<p class="fun">${icon('spark')} ${esc(a.fun)}</p>` : ''}
+    ${(a.links ?? []).length ? `<h3>Sources</h3><ul>${a.links.map(([t, u]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)} ↗</a></li>`).join('')}</ul>` : ''}
+    ${x.go ? `<div class="cta-row"><a class="btn primary" href="${esc(x.go)}">Hunt it ${icon('arrow')}</a></div>` : ''}
+  </div>`;
+  const close = () => w.remove();
+  w.onclick = (e) => { if (e.target === w) close(); };
+  w.querySelector('.sheet-x').onclick = close;
+  document.addEventListener('keydown', function k(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', k); } });
+  document.body.append(w);
+  w.querySelector('.sheet-x').focus();
+}
+const learnProblem = (p) => learnMore({ title: p.title, about: p.about, why: p.tagline, verify: p.about?.verify ?? `Exact: ${p.statement}`, go: `#/mission/${p.id}` });
+
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
@@ -822,6 +954,8 @@ function route() {
   if (parts[0] === 'data') return dataPage();
   if (parts[0] === 'start') return joinPage();
   if (parts[0] === 'stats') return statsPage();
+  if (parts[0] === 'players') return playersPage();
+  if (parts[0] === 'me') { const m = moi(); if (m) { location.hash = `#/u/${m}`; return; } return playersPage(); }
   if (parts[0] === 'hive') return import('./hive.mjs').then((m) => m.hivePage(app, DATA, { toast, copy, submitUrl })).catch((e) => (app.innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`));
   return notFound();
 }

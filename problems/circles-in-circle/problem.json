@@ -419,5 +419,17 @@
         "date": "2026-11-07"
       }
     }
-  ]
+  ],
+  "about": {
+    "what": "The same game in a round box: n identical coins inside a circle, as big as possible. The best layouts look like rings, but the rings break in surprising ways as n grows.",
+    "why": "Close to packing cables in a duct, fibres in a bundle, or cells in a dish. Like the square version, it is a shared benchmark for optimization methods.",
+    "impact": "Modest: a recognised result in a niche, and an excellent training ground for the swarm.",
+    "fun": "Researchers still update these tables every week: in November 2026 alone, thousands of best-known packings were improved.",
+    "links": [
+      [
+        "Packomania: circles in a circle",
+        "https://www.packomania.com/cci/cci.html"
+      ]
+    ]
+  }
 }

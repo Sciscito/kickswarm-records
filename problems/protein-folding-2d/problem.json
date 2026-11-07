@@ -139,5 +139,17 @@
       },
       "proven": false
     }
-  ]
+  ],
+  "about": {
+    "what": "A protein is a chain of amino acids that folds into a shape. In this simplified model, each link is H (water-fearing) or P (water-loving), and the chain folds on a grid. The best folds hide the H links together, like real proteins do.",
+    "why": "The HP model is a standard benchmark of protein-folding research: it is used to compare search algorithms before they are applied to real, far more complex proteins.",
+    "impact": "Mostly a training ground: the model is much simpler than real biology, and folds up to 80 links are already proven optimal. The 85- and 100-link chains could still bring algorithmic records.",
+    "fun": "Folding real proteins was considered one of biology's grand challenges; AlphaFold changed that in 2020. Simple models like this one are where many of the ideas were first tested.",
+    "links": [
+      [
+        "Benchmark table (BMC Bioinformatics, 2005)",
+        "https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-6-30/tables/2"
+      ]
+    ]
+  }
 }

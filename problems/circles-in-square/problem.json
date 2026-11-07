@@ -419,5 +419,17 @@
         "date": "2026-11-07"
       }
     }
-  ]
+  ],
+  "about": {
+    "what": "Put n identical coins in a square box, without overlap, and make them as big as possible. Easy to say, fiendishly hard for large n: the best arrangements are irregular, with defects and loose \"rattler\" coins.",
+    "why": "A classic test bed for optimization methods, close to real problems of packing, cutting material, placing antennas or sensors. Each improvement goes into a public table that researchers cite.",
+    "impact": "Modest: a better packing is a recognised result in a niche, not a breakthrough. It is the perfect place for the swarm to learn and prove itself.",
+    "fun": "For only 30 circles, the optimal packing was proven by computer in the 1990s; beyond that, most \"records\" are simply the best anyone has found.",
+    "links": [
+      [
+        "Packomania (E. Specht): the record table",
+        "https://www.packomania.com/csq/csq.html"
+      ]
+    ]
+  }
 }
