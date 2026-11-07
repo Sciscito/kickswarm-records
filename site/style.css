@@ -695,3 +695,50 @@ body.is-home.scrolled .top { background: color-mix(in srgb, var(--bg) 88%, trans
   body { padding-bottom: 70px; }
   nav a.nav-cta { display: none; }
 }
+
+/* ===== Territory map (a planet of hexes) ===== */
+.maphead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.maphud { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+@media (max-width: 760px) { .maphud { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.hudt { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; background: var(--card); display: grid; gap: 4px; align-content: start; }
+.hudt.you { border-color: color-mix(in srgb, var(--honey) 55%, var(--line)); background: color-mix(in srgb, var(--honey) 8%, var(--card)); }
+.hudt small { font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.hudt b { font: 400 30px/1.1 var(--serif); color: var(--ink); }
+.hudt.you b { color: var(--honey); }
+.hudt b span { font: 400 14px var(--sans, inherit); color: var(--dim); }
+.hudt p { margin: 0; font-size: 13px; color: var(--dim); }
+.hudt .bar2 { height: 6px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; display: block; }
+.hudt .bar2 i { display: block; height: 100%; background: linear-gradient(90deg, var(--honey), #ffd66e); }
+.mapwrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .mapwrap { grid-template-columns: 1fr; } }
+.hexmap { width: 100%; height: auto; max-height: 80vh; display: block; border-radius: 22px; border: 1px solid #1d2448;
+  background: radial-gradient(ellipse at 70% 80%, #2a1458 0%, transparent 55%), radial-gradient(ellipse at 20% 10%, #10204d 0%, transparent 60%), #05060f; }
+.hexbg { stroke: rgba(0,0,0,.55); stroke-width: 2; transition: filter .2s; }
+.hexbg.wild { fill: hsl(95 30% 40%); stroke: hsl(95 25% 28%); }
+.hexbg.owned { filter: saturate(1.1); }
+.hexbg.mine { stroke: #fff2c4; stroke-width: 3.5; }
+.hexbg.friend { stroke: #ffffff; stroke-width: 3; }
+.tile-hex:hover .hexbg { filter: brightness(1.3); }
+.hexlabel { fill: rgba(10,10,20,.85); font: 700 10px var(--mono); text-anchor: middle; pointer-events: none; }
+.hexlabel.wild { fill: rgba(235,245,220,.75); }
+.crown { fill: #fff6c9; font: 15px var(--serif); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(0,0,0,.6); stroke-width: 2px; }
+.beeglow { animation: pulseglow 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; mix-blend-mode: screen; }
+@keyframes pulseglow { 50% { opacity: .45; transform: scale(1.3); } }
+.orbit { animation: orbitb 4s linear infinite; }
+@keyframes orbitb { to { transform: rotate(360deg); } }
+.beam { stroke: #f2b33d; stroke-width: 3; stroke-dasharray: 2 9; stroke-linecap: round; animation: beamflow .7s linear infinite; filter: drop-shadow(0 0 4px #f2b33d); }
+@keyframes beamflow { to { stroke-dashoffset: -11; } }
+.hivelabel { fill: #0c0b09; font: 800 9px var(--mono); text-anchor: middle; }
+@media (prefers-reduced-motion: reduce) { .beeglow, .orbit, .beam { animation: none; } }
+.maplegend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; }
+.maplegend span { display: inline-flex; align-items: center; gap: 6px; }
+.maplegend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.maplegend .sw.ring { border: 2px solid #fff; background: transparent; }
+.maplegend .sw.beam { height: 3px; width: 18px; background: repeating-linear-gradient(90deg, #f2b33d 0 3px, transparent 3px 7px); border-radius: 2px; }
+.mapside h3 { font-weight: 400; font-size: 19px; }
+.lord { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink); }
+.lord:hover { text-decoration: none; }
+.lord .sw { width: 14px; height: 14px; border-radius: 4px; }
+.lord.me b { color: var(--honey); }
+.lord .bar2 { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 7%, transparent); overflow: hidden; display: block; }
+.lord .bar2 i { display: block; height: 100%; }

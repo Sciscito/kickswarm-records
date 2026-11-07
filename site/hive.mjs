@@ -402,7 +402,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const ps = (s.problems ?? []).map((id) => DATA.problems.find((x) => x.id === id)).filter(Boolean);
       if (ps.length !== 1) return '';
       const p = ps[0];
-      return `<div class="epic"><span class="mono">YOUR EPIC</span><b>${esc(p.title)}</b><small>${p.cases.length} cases · ${esc(p.level ?? '')}</small><a class="btn small" href="#/p/${p.id}">See the board</a><button class="btn small" id="epic-invite">${icon('share')} Invite friends</button><button class="btn small ghost" id="epic-all">Hunt everything</button></div>`;
+      return `<div class="epic"><span class="mono">YOUR EPIC</span><b>${esc(p.title)}</b><small>${p.cases.length} cases · ${esc(p.level ?? '')}</small><a class="btn small" href="#/map/${p.id}">Territory map</a><button class="btn small" id="epic-invite">${icon('share')} Invite friends</button><button class="btn small ghost" id="epic-all">Hunt everything</button></div>`;
     })()}
     ${(() => {
       const hasHunt = (s.problems ?? []).length > 0;
