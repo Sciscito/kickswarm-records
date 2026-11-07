@@ -31,8 +31,8 @@ export async function sendSolution(sub, { relay, repo, copy, toast }) {
     const r = await fetch(`${relay.replace(/\/$/, '')}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error ?? `relay HTTP ${r.status}`);
-    toast('Sent. The robot answers within a minute or two.');
-    return j.url;
+    toast('Sent. It joins the public registry within about 10 minutes.');
+    return null;
   }
   const json = JSON.stringify(signed);
   const base = `https://github.com/${repo}/issues/new?template=solution.yml&title=${encodeURIComponent(`[solution] ${sub.problem} n=${sub.case}`)}`;

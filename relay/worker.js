@@ -1,9 +1,9 @@
-// Kickswarm Records relay (Cloudflare Worker, free tier): lets anyone submit WITHOUT a GitHub account.
-// It accepts only solutions signed by a device key (see lib/keys.mjs), checks the signature, and opens the
-// "[solution]" issue that the robot judges like any other. It holds one secret: a fine-grained GitHub
-// token limited to "Issues: write" on this one repository.
+// Kickswarm Records relay (Cloudflare Worker + KV, free tier): submissions WITHOUT any account.
+// It holds no secret at all. It accepts only solutions signed by a device key (see lib/keys.mjs), checks
+// the signature, and keeps them in a public queue for 14 days. The GitHub robot reads the queue every
+// few minutes and judges each submission like any other; the registry remembers which ones it handled.
 //
-// Environment: GITHUB_TOKEN (secret), REPO ("owner/name"), ALLOWED_ORIGIN (the site's origin).
+// Bindings: QUEUE (KV namespace). Vars: ALLOWED_ORIGIN (the site's origin).
 
 const enc = (s) => new TextEncoder().encode(s);
 const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
@@ -14,6 +14,7 @@ function canonical(v) {
 }
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{1,23}$/;
 const PROBLEMS = ['circles-in-square', 'circles-in-circle', 'no-three-in-line'];
+const PER_KEY_PER_DAY = 300;
 
 async function verify(sub) {
   const { sig, ...body } = sub;
@@ -29,25 +30,37 @@ async function verify(sub) {
 
 export default {
   async fetch(req, env) {
-    const cors = { 'access-control-allow-origin': env.ALLOWED_ORIGIN, 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', vary: 'origin' };
+    const url = new URL(req.url);
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
     const reply = (code, data) => new Response(JSON.stringify(data), { status: code, headers: { ...cors, 'content-type': 'application/json' } });
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
-    if (req.method !== 'POST' || new URL(req.url).pathname !== '/submit') return reply(404, { error: 'POST /submit' });
+
+    // The public queue: everything here is public data anyway (it ends up in the public registry).
+    if (req.method === 'GET' && url.pathname === '/queue') {
+      const list = await env.QUEUE.list({ prefix: 'sub:', limit: 100, cursor: url.searchParams.get('cursor') ?? undefined });
+      const items = [];
+      for (const k of list.keys) {
+        const v = await env.QUEUE.get(k.name);
+        if (v) items.push({ id: k.name, submission: JSON.parse(v) });
+      }
+      return reply(200, { items, cursor: list.list_complete ? null : list.cursor });
+    }
+
+    if (req.method !== 'POST' || url.pathname !== '/submit') return reply(404, { error: 'POST /submit or GET /queue' });
     const text = await req.text();
     if (text.length > 200000) return reply(413, { error: 'too large' });
     let sub;
     try { sub = JSON.parse(text); } catch { return reply(400, { error: 'not JSON' }); }
     if (!PROBLEMS.includes(sub.problem) || !/^\d{1,5}$/.test(String(sub.case))) return reply(400, { error: 'unknown problem or case' });
     if (!(await verify(sub))) return reply(401, { error: 'missing or wrong signature' });
-    const title = `[solution] ${sub.problem} n=${sub.case} · ${sub.hunter.name}`;
-    const body = `Submitted through the relay by **${sub.hunter.name}** (device key, no GitHub account).\n\n### Solution\n\n\`\`\`json\n${JSON.stringify(sub)}\n\`\`\`\n`;
-    const r = await fetch(`https://api.github.com/repos/${env.REPO}/issues`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: 'application/vnd.github+json', 'user-agent': 'kickswarm-records-relay', 'content-type': 'application/json' },
-      body: JSON.stringify({ title, body }),
-    });
-    if (!r.ok) return reply(502, { error: `GitHub said ${r.status}` });
-    const issue = await r.json();
-    return reply(201, { url: issue.html_url, number: issue.number });
+    // A simple daily cap per key, so one device cannot flood the queue.
+    const day = new Date().toISOString().slice(0, 10);
+    const rk = `rate:${sub.hunter.key.slice(0, 24)}:${day}`;
+    const used = Number((await env.QUEUE.get(rk)) ?? 0);
+    if (used >= PER_KEY_PER_DAY) return reply(429, { error: 'daily limit reached for this device' });
+    await env.QUEUE.put(rk, String(used + 1), { expirationTtl: 172800 });
+    const id = `sub:${Date.now().toString(36)}:${crypto.randomUUID().slice(0, 8)}`;
+    await env.QUEUE.put(id, JSON.stringify(sub), { expirationTtl: 14 * 86400 });
+    return reply(201, { id, status: 'queued', note: 'The robot judges queued submissions every few minutes.' });
   },
 };

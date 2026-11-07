@@ -8,7 +8,7 @@ on:
   issues:
     types: [opened]
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -40,11 +40,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
       - name: Save the registry
-        if: steps.robot.outputs.changed == 'true'
+        if: steps.robot.outputs.changed == 'true' || hashFiles('relay-rejected.json') != ''
         run: |
           git config user.name "kickswarm-records[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add registry.jsonl records solutions trophies
+          git add registry.jsonl records solutions trophies relay-rejected.json
+          git diff --cached --quiet && exit 0
           git commit -m "Registry: ${{ steps.robot.outputs.count }} submission(s)"
           git pull --rebase origin main
           git push origin HEAD:main

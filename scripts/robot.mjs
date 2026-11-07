@@ -5,8 +5,9 @@
 // Locally (tests): GITHUB_EVENT_PATH alone processes that one issue.
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { extractJson, processSubmission, resolveAuthor } from '../lib/process.mjs';
+import { readRegistry } from '../lib/registry.mjs';
 
 const HANDLED = ['record', 'world-record', 'attempt', 'rejected'];
 const repo = process.env.GITHUB_REPOSITORY;
@@ -43,5 +44,37 @@ for (const issue of openIssues()) {
   replies.push({ number: issue.number, label, reply });
   console.log(`#${issue.number}: ${result.message.split('\n')[0]}`);
 }
+// The relay queue: signed submissions from people without a GitHub account.
+const relayUrl = JSON.parse(readFileSync('site/config.json', 'utf8')).relay;
+if (relayUrl) {
+  const done = new Set(readRegistry().map((e) => e.relay).filter(Boolean));
+  const rejected = new Set(existsSync('relay-rejected.json') ? JSON.parse(readFileSync('relay-rejected.json', 'utf8')) : []);
+  let cursor = null;
+  try {
+    do {
+      const r = await fetch(`${relayUrl.replace(/\/$/, '')}/queue${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { signal: AbortSignal.timeout(20000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const page = await r.json();
+      for (const it of page.items) {
+        if (done.has(it.id) || rejected.has(it.id)) continue;
+        let result;
+        try {
+          const who = await resolveAuthor(it.submission, null);
+          result = await processSubmission(it.submission, { ...who, relay: it.id, ts: new Date().toISOString() });
+        } catch (e) {
+          result = { status: 'rejected', message: `Rejected: ${e.message}` };
+        }
+        if (result.status === 'rejected') rejected.add(it.id);
+        else changed = true;
+        console.log(`relay ${it.id}: ${result.message.split('\n')[0]}`);
+      }
+      cursor = page.cursor;
+    } while (cursor);
+  } catch (e) {
+    console.log(`relay unreachable: ${e.message}`);
+  }
+  writeFileSync('relay-rejected.json', JSON.stringify([...rejected].slice(-2000)));
+}
+
 writeFileSync('replies.json', JSON.stringify(replies));
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `changed=${changed}\ncount=${replies.length}\n`);

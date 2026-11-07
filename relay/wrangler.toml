@@ -2,7 +2,7 @@ name = "kickswarm-records-relay"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
-[vars]
-REPO = "Sciscito/kickswarm-records"
-ALLOWED_ORIGIN = "https://sciscito.github.io"
-# GITHUB_TOKEN is a secret: npx wrangler secret put GITHUB_TOKEN
+# Filled in by: npx wrangler kv namespace create QUEUE
+kv_namespaces = [
+  { binding = "QUEUE", id = "7f0a61b3185e45b9973fa7dfdcc31d60" }
+]

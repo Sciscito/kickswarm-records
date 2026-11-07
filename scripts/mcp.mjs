@@ -78,7 +78,7 @@ async function call(name, a = {}) {
       const r = await fetch(`${config.relay.replace(/\/$/, '')}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(`relay: ${j.error ?? r.status}`);
-      return `${verdict}\nSubmitted: ${j.url}. The robot replies there within a minute or two.`;
+      return `${verdict}\nSent through the relay. It joins the public registry within about 10 minutes.`;
     }
     mkdirSync('hunts/outbox', { recursive: true });
     const file = `hunts/outbox/${sub.problem}-${sub.case}-${Date.now()}.json`;
