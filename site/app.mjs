@@ -1064,6 +1064,8 @@ function notFound() {
 
 function route() {
   setTimeout(paintLive, 50);
+  const tab = (location.hash.replace(/^#\/?/, '').split('/')[0]) || 'home';
+  document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'p' || tab === 'mission' || tab === 'join' ? 'catalogue' : tab === 'u' ? 'players' : tab)));
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   window.scrollTo(0, 0);
   if (parts.length) { stopHero?.(); stopHero = null; }
