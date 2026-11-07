@@ -196,8 +196,10 @@ createServer(async (req, res) => {
       } else if (url.pathname === '/api/inventory') {
         await refreshInventory();
       } else if (url.pathname === '/api/start') {
+        settings = { ...settings, autostart: true };
         if (!hive.running) hive.run().catch((e) => hive.log(`error: ${e.message}`));
       } else if (url.pathname === '/api/stop') {
+        settings = { ...settings, autostart: false };
         hive.stop(!!b.now);
       } else if (url.pathname === '/api/schedule') {
         const msg = b.install ? installSchedule(settings.schedule.from, settings.schedule.to) : removeSchedule();
@@ -235,6 +237,7 @@ createServer(async (req, res) => {
     res.writeHead(404).end('not found');
   }
 }).listen(PORT, '127.0.0.1', () => {
+  if (settings.autostart) { hive.log('Starting automatically (you started it last time; press Stop to turn this off).'); hive.run().catch((e) => hive.log(`error: ${e.message}`)); }
   const link = `http://localhost:${PORT}/?t=${TOKEN}#/hive`;
   console.log(`\nKickswarm personal hive dashboard\n\n  Open: ${link}\n\n  (Local only. The link holds this session's token; keep it to yourself. Ctrl+C to quit.)\n`);
   if (!process.argv.includes('--no-open')) {

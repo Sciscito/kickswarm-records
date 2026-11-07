@@ -5,7 +5,7 @@
 //   AI models with keys kept on this device only. No prompt to paste.
 
 import { better, shortScore, toUnits } from './lib/exact.mjs';
-import { callModel, listModels, PROVIDERS, sourceFor } from './lib/llm.mjs';
+import { callModel, listModels, OPENROUTER_FREE_MAX, PROVIDERS, sourceFor } from './lib/llm.mjs';
 import { pickMission } from './lib/mission.mjs';
 import { fromPreset, inWindow, PRESETS, ruleCommand } from './lib/presets.mjs';
 import { extractSearcher, searcherPrompt } from './lib/searchgen.mjs';
@@ -107,7 +107,8 @@ function browserBackend(DATA) {
       if (!key || !PROVIDERS[id]) continue;
       try {
         const models = await listModels(id, key);
-        if (models[0]) out.push({ ...sourceFor(id, key, models[0]), models: models.slice(0, 15), masked: `…${key.slice(-4)}` });
+        if (id === 'openrouter') for (const m of models.slice(0, OPENROUTER_FREE_MAX)) out.push({ ...sourceFor(id, key, m), label: `OpenRouter free · ${m.replace(/:free$/, '')}`, models: models.slice(0, 15), masked: `…${key.slice(-4)}` });
+        else if (models[0]) out.push({ ...sourceFor(id, key, models[0]), models: models.slice(0, 15), masked: `…${key.slice(-4)}` });
       } catch (e) { log(`${PROVIDERS[id].label}: ${e.message}`); }
     }
     sources = out;
@@ -126,13 +127,14 @@ function browserBackend(DATA) {
   });
   const allowed = (s) => settings.tiers?.[s.tier] !== false && !(settings.disabled ?? []).includes(s.key);
   const quotaLeft = (s) => ((usage[today()] ??= {})[s.key] ?? 0) < (settings.quotas?.[s.tier] ?? 0);
-  function pickSource() {
+  function pickSource(busy = new Set()) {
     for (const tier of ['local', 'free', 'paid', 'sub']) {
-      const ok = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3);
+      const all = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3);
+      const ok = all.filter((s) => !busy.has(s.key)).length ? all.filter((s) => !busy.has(s.key)) : all;
       // Prefer models with a track record across the swarm (records per try), then this device's own.
       const g = (s) => { const x = (DATA.learning?.global ?? []).find((m) => m.model === s.model); return x ? (x.records + 1) / (x.records + x.attempts + 2) : 0.3; };
       const own = (s) => { const x = stats[s.key]; return x ? (x.improved * 3 + x.valid + 1) / (x.calls + 2) : 0.5; };
-      if (ok.length) return ok.sort((a, b) => g(b) + own(b) - (g(a) + own(a)))[0];
+      if (ok.length) return ok.map((s) => ({ s, v: g(s) + own(s) + Math.random() * 0.25 })).sort((a, b) => b.v - a.v)[0].s;
     }
     for (const s of sources) if (stats[s.key]) stats[s.key].streak = 0;
     return null;
@@ -166,10 +168,10 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     const p = m.problem;
     const cur = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     let prog = { url: builtinUrl(p.id), source: 'cpu:builtin' };
-    if (sources.some(allowed) && (round + i) % 2 === 1) {
-      const src = pickSource();
+    if (sources.some(allowed)) {
+      const src = pickSource(new Set([...active.values()].map((a) => a.sourceKey).filter(Boolean)));
       if (src) {
-        active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label });
+        active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label, sourceKey: src.key });
         emit('state', snapshot());
         try {
           const parent = library.filter((x) => x.problem === p.id).sort((a, b) => b.wins - a.wins)[0];
@@ -259,8 +261,8 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
       return publicState();
     },
     async identity(name) { await createIdentity(name); ident = await identitySummary(); return publicState(); },
-    async start() { if (!running) run(); return publicState(); },
-    async stop(now) { stopping = true; if (now) workers.forEach((w) => w.terminate()); emit('state', snapshot()); return publicState(); },
+    async start() { settings = { ...settings, autostart: true }; save(); if (!running) run(); return publicState(); },
+    async stop(now) { settings = { ...settings, autostart: false }; save(); stopping = true; if (now) workers.forEach((w) => w.terminate()); emit('state', snapshot()); return publicState(); },
     async schedule() { throw new Error('Scheduled nights need the hive on a computer (npm run hive). In the browser, the hive runs while this tab is open.'); },
     async command(text) {
       const src = sources.find(allowed);
@@ -335,7 +337,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
           ${srcByTier(t).map((x) => `<div class="src ${on(x) ? 'on' : ''}"><label class="switch"><input type="checkbox" data-src="${esc(x.key)}" ${!(s.disabled ?? []).includes(x.key) ? 'checked' : ''}><span></span></label><div><b>${esc(x.label)}</b><small>${h.usage?.[x.key] ?? 0} calls today${x.masked ? ` · key ${esc(x.masked)}` : ''}${h.stats?.[x.key] ? ` · ${h.stats[x.key].improved} record(s) from ${h.stats[x.key].calls} call(s)` : ''}</small></div>${x.masked ? `<button class="btn small" data-forget="${esc(x.key.split(':')[0])}">Forget key</button>` : ''}${x.kind === 'webllm' ? '<button class="btn small" id="webllm-off">Remove</button>' : ''}</div>`).join('')}`).join('')}
         <div class="connect">
           <h4>Connect your AI <small>most people already have one of these</small></h4>
-          ${inv.sources.some((x) => x.key.startsWith('openrouter:')) ? '' : `<div class="addrow hero-row"><b>${icon('spark')} OpenRouter, free models</b><small>Dozens of free models (DeepSeek, Qwen, Llama…) behind one login. Log in with Google or GitHub, approve, done: nothing to copy. Free within OpenRouter's daily limits.</small><div class="addkey"><button class="btn primary small" id="or-login">Connect with OpenRouter</button></div></div>`}
+          ${inv.sources.some((x) => x.key.startsWith('openrouter:')) ? '' : `<div class="addrow hero-row"><b>${icon('spark')} OpenRouter, free models</b><small>Every free model of the moment (models in test, DeepSeek, Qwen, Nemotron, Gemma…) behind one login; the hive uses up to 6 at once and learns which works best. Log in with Google or GitHub, approve, done: nothing to copy. Free within OpenRouter's daily limits.</small><div class="addkey"><button class="btn primary small" id="or-login">Connect with OpenRouter</button></div></div>`}
           <div class="addrow hero-row"><b>${icon('hive')} Your subscription: ChatGPT, Claude, Gemini</b>
             <small>${local
               ? `Detected here: ${['cli:claude', 'cli:codex', 'cli:gemini'].map((k) => inv.sources.some((x) => x.key === k) ? `<span class="ok">${k.slice(4)} ✓</span>` : `<span class="dimmed">${k.slice(4)}</span>`).join(' · ')}. The hive drives them through their official command-line tools, within your plan's own limits. Missing one? <a href="https://docs.anthropic.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Claude Code</a> (Claude Pro/Max), <a href="https://github.com/openai/codex" target="_blank" rel="noopener">Codex</a> (ChatGPT plans), <a href="https://github.com/google-gemini/gemini-cli" target="_blank" rel="noopener">Gemini CLI</a> (any Google account).`
@@ -344,10 +346,10 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
           ${inv.sources.some((x) => x.key.startsWith('gemini:')) ? '' : `<div class="addrow"><b>${icon('key')} Google Gemini, free tier</b><small>With your Google account: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a> → “Create API key” → paste it here.</small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your Gemini key" data-keyfor="gemini"><button class="btn small" data-savekey="gemini">Connect</button></div></div>`}
           <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider${local ? '' : '; search programs never see them'}.</p>
         </div>
-        <details class="add"><summary>Advanced: local models, paid APIs</summary>
+        <details class="add"><summary>More free providers, cheap Chinese APIs, local models</summary>
           ${local ? (inv.sources.some((x) => x.kind === 'ollama') ? '<p class="hint">Ollama detected: its best model is in your sources.</p>' : '<div class="addrow"><b>Local models (optional)</b><small>Only if you want to: installs Ollama and qwen2.5-coder 7B (about 5 GB) to run models on this computer.</small><div class="addkey"><button class="btn small" id="ollama-install">Install it for me</button></div></div>') : ''}
           ${!local && !inv.sources.some((x) => x.kind === 'webllm') ? `<div class="addrow"><b>On-device model (no key, no account)</b><small>${navigator.gpu ? 'Runs on this device’s graphics chip. Downloads about 1 GB once. Best on a computer or a recent phone, on Wi-Fi.' : 'Needs WebGPU (recent Chrome or Edge).'}</small>${navigator.gpu ? '<div class="addkey"><button class="btn small" id="webllm-on">Download and use</button></div>' : ''}</div>` : ''}
-          ${['groq', 'anthropic', 'openai'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
+          ${['groq', 'mistral', 'cerebras', 'sambanova', 'github', 'deepseek', 'moonshot', 'zai', 'anthropic', 'openai'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
         </details>
         ${local && inv.tools?.length ? `<p class="hint">Tools your agents already have (MCP): ${inv.tools.map((t) => esc(t.name)).join(', ')}. The hive does not use them for searching; the setup prompt below may.</p>` : ''}
       </section>
@@ -482,6 +484,8 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   }
 
   render();
+  // Start by itself when the person started it last time (Stop turns this off).
+  if (st.settings.autostart && !st.hive.running) apply(() => be.start());
   const off = be.events((ev, d) => {
     if (!document.body.contains(app) || !location.hash.startsWith('#/hive')) { off(); return; }
     if (ev === 'log') {
