@@ -13,6 +13,7 @@ import { agentSetupPrompt } from './lib/agentprompt.mjs';
 import { BEE, icon } from './icons.mjs';
 import { createIdentity, getIdentity, identitySummary } from './identity.mjs';
 import { sendPresence } from './lib/presence.mjs';
+import { fit, needFor, weightOf } from './lib/delegate.mjs';
 
 const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
 
@@ -129,14 +130,15 @@ function browserBackend(DATA) {
   });
   const allowed = (s) => settings.tiers?.[s.tier] !== false && !(settings.disabled ?? []).includes(s.key);
   const quotaLeft = (s) => ((usage[today()] ??= {})[s.key] ?? 0) < (settings.quotas?.[s.tier] ?? 0);
-  function pickSource(busy = new Set()) {
-    for (const tier of ['local', 'free', 'paid', 'sub']) {
-      const all = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3);
+  function pickSource(busy = new Set(), need = 'any') {
+    // First a model that fits the task (big for hard thinking, small for light work), then any model.
+    for (const strict of [true, false]) for (const tier of ['local', 'free', 'paid', 'sub']) {
+      const all = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3 && (!strict || fit(weightOf(s), need) > 0));
       const ok = all.filter((s) => !busy.has(s.key)).length ? all.filter((s) => !busy.has(s.key)) : all;
       // Prefer models with a track record across the swarm (records per try), then this device's own.
       const g = (s) => { const x = (DATA.learning?.global ?? []).find((m) => m.model === s.model); return x ? (x.records + 1) / (x.records + x.attempts + 2) : 0.3; };
       const own = (s) => { const x = stats[s.key]; return x ? (x.improved * 3 + x.valid + 1) / (x.calls + 2) : 0.5; };
-      if (ok.length) return ok.map((s) => ({ s, v: g(s) + own(s) + Math.random() * 0.25 })).sort((a, b) => b.v - a.v)[0].s;
+      if (ok.length) return ok.map((s) => ({ s, v: g(s) + own(s) + fit(weightOf(s), need) * 0.3 + Math.random() * 0.25 })).sort((a, b) => b.v - a.v)[0].s;
     }
     for (const s of sources) if (stats[s.key]) stats[s.key].streak = 0;
     return null;
@@ -171,7 +173,8 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     const cur = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
     let prog = { url: builtinUrl(p.id), source: 'cpu:builtin' };
     if (sources.some(allowed)) {
-      const src = pickSource(new Set([...active.values()].map((a) => a.sourceKey).filter(Boolean)));
+      const need = needFor(p, { hasParent: library.some((x) => x.problem === p.id && x.wins > 0) });
+      const src = pickSource(new Set([...active.values()].map((a) => a.sourceKey).filter(Boolean)), need);
       if (src) {
         active.set(i, { phase: 'writing', problem: p.id, case: m.cas.id, source: src.label, sourceKey: src.key, startScore: cur?.score ?? null });
         emit('state', snapshot());
@@ -322,6 +325,7 @@ function niveau(xp) {
   const next = (lvl + 1) * (lvl + 1) * 5;
   return { lvl, pct: Math.round(((xp - base) / (next - base)) * 100), toNext: next - xp };
 }
+let SITE_SECONDS = 120;
 function agentCard(a) {
   const [kind, cls] = SOURCE_KIND(a.phase === 'writing' ? a.sourceKey ?? '' : a.source ?? '');
   const p = SITE.problems.find((x) => x.id === a.problem);
@@ -334,7 +338,13 @@ function agentCard(a) {
     <div class="ahead"><span class="aav ${cls}">${esc(initials(model))}</span><div class="aname"><b>${esc(model)}</b><small class="kind ${cls}">${kind}</small></div><span class="aphase">${a.phase === 'writing' ? icon('pen') : icon('search')}</span></div>
     <div class="atask">${esc(p?.title ?? a.problem)} · ${p?.id === 'protein-folding-2d' ? esc(String(a.case).toUpperCase()) : `n = ${esc(a.case)}`}</div>
     <div class="ascore">${sc}</div>
-    ${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div><small class="arem" data-until="${a.until}"></small>` : '<div class="bar ind"><i></i></div>'}
+    ${a.until ? (() => {
+      // The bar continues where it was (negative delay), so a refresh of the page never sends it back to zero.
+      const total = Math.max(1, ((a.until - (a.started ?? a.until - (SITE_SECONDS || 120) * 1000)) / 1000));
+      const done = Math.min(total, Math.max(0, total - (a.until - Date.now()) / 1000));
+      const r = Math.max(0, Math.round((a.until - Date.now()) / 1000));
+      return `<div class="bar"><i style="animation-duration:${total.toFixed(1)}s;animation-delay:-${done.toFixed(1)}s"></i></div><small class="arem" data-until="${a.until}">${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')} left</small>`;
+    })() : `<div class="bar ind"><i></i></div><small class="arem">${a.phase === 'writing' ? 'the AI is writing…' : 'starting…'}</small>`}
   </div>`;
 }
 
@@ -430,6 +440,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
 
   const render = () => {
     const s = st.settings;
+    SITE_SECONDS = s.seconds ?? 120;
     const inv = st.inventory;
     const h = st.hive;
     const srcByTier = (t) => inv.sources.filter((x) => x.tier === t);
@@ -454,7 +465,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const J = joursDeChasse(h.running);
       const n = Math.max(1, s.workers);
       const cards = (h.active ?? []).map(agentCard);
-      while (cards.length < n) cards.push(`<div class="agent idle"><div class="ahead"><span class="aav">${BEE}</span><div class="aname"><b>${h.running ? 'Getting a mission…' : 'Asleep'}</b><small class="kind">worker ${cards.length + 1}</small></div></div><div class="atask">${h.running ? 'picking a case few people tried' : 'press Start to wake the swarm'}</div></div>`);
+      while (cards.length < n) cards.push(`<div class="agent idle"><div class="ahead"><span class="aav">${BEE}</span><div class="aname"><b>${h.running ? 'Getting a mission…' : 'Asleep'}</b><small class="kind">worker ${cards.length + 1}</small></div></div><div class="atask">${h.running ? 'picking a case few people tried' : 'press Start to wake the swarm'}</div><div class="ascore">&nbsp;</div><div class="bar ${h.running ? 'ind' : ''}"><i style="${h.running ? '' : 'animation:none;transform:scaleX(0)'}"></i></div><small class="arem">&nbsp;</small></div>`);
       return `<section class="control">
         <div class="cbar">
           <div class="clevel"><span class="lvl mono">LV ${L.lvl}</span><div class="xp"><i style="width:${L.pct}%"></i></div><small>${xp} XP · ${L.toNext} to level ${L.lvl + 1}</small></div>
@@ -674,7 +685,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   render();
   const tick = setInterval(() => {
     if (!document.body.contains(app) || !location.hash.startsWith('#/hive')) return clearInterval(tick);
-    app.querySelectorAll('.arem').forEach((el) => { const r = Math.max(0, Math.round((Number(el.dataset.until) - Date.now()) / 1000)); el.textContent = `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')} left`; });
+    app.querySelectorAll('.arem[data-until]').forEach((el) => { const r = Math.max(0, Math.round((Number(el.dataset.until) - Date.now()) / 1000)); el.textContent = `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')} left`; });
   }, 1000);
   // Start by itself when the person started it last time (Stop turns this off).
   if (st.settings.autostart && !st.hive.running) apply(() => be.start());

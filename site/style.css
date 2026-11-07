@@ -772,3 +772,8 @@ canvas.planet { display: block; width: 100%; max-width: min(100%, 72vh); aspect-
 .hivepill:hover { text-decoration: none; filter: brightness(1.1); }
 .hivepill[hidden] { display: none; }
 .hivepill .pdot { background: #0c1a0f; }
+
+/* Agent cards keep one size, whatever they show */
+.agent { grid-template-rows: auto auto 1.4em auto auto; min-height: 170px; align-content: start; }
+.ascore, .arem, .atask { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arem { min-height: 1.3em; }
