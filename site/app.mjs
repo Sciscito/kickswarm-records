@@ -2,6 +2,7 @@
 import { better, shortScore, toUnits } from './lib/exact.mjs';
 import { drawSolution, TIERS } from './lib/render.mjs';
 import { huntPrompt, pickMission } from './lib/mission.mjs';
+import { icon } from './icons.mjs';
 
 const app = document.getElementById('app');
 let DATA;
@@ -101,12 +102,19 @@ async function paint(el) {
   const rec = await getSolution(pid, cid);
   if (!rec) {
     // An empty case: the bare grid, waiting for its first points.
-    el.innerHTML = pid === 'no-three-in-line' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { mono: true }) : '<span class="q">?</span>';
+    el.innerHTML = pid === 'no-three-in-line' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { tier: 'valid', mono: true }) : '<span class="q">?</span>';
     return;
   }
   const tier = rec.tier ?? (rec.reference ? 'reference' : 'valid');
-  el.innerHTML = drawSolution(pid, c.n, rec.solution, Number(size) || 300, { radius: Number(rec.score), mono: tier === 'valid', hue: TIERS[tier]?.hue ?? undefined, salt: `${pid}|${cid}|${rec.author}|${rec.seq}` });
+  el.innerHTML = drawSolution(pid, c.n, rec.solution, Number(size) || 300, { tier, radius: p.score_name === 'radius' ? Number(rec.score) : undefined, mono: tier === 'valid' });
 }
+/** A drawing framed as a plate of the observatory notebook, with its caption. */
+const plate = (pid, cid, size, fig, cls = 'plate') => {
+  const p = problem(pid);
+  const s = summary(pid, cid);
+  const val = s.score ? `${p.score_name === 'radius' ? 'r' : 'points'} = ${shortScore(s.score)}` : 'open';
+  return `<figure class="${cls}">${art(pid, cid, size, 'art')}<figcaption><i>Fig. ${esc(fig)}</i> ${esc(p.title)}, <i>n</i> = ${esc(cid)} <span class="mono">${esc(val)}</span></figcaption></figure>`;
+};
 const art = (pid, cid, size = 300, cls = 'art') => `<div class="${cls}" data-art data-pid="${pid}" data-cid="${cid}" data-size="${size}"></div>`;
 function hydrate() {
   app.querySelectorAll('[data-art]').forEach((el) => observer.observe(el));
@@ -145,14 +153,15 @@ function home() {
   app.innerHTML = `
   <section class="hero">
     <div>
-      <h1>The swarm hunts world records.</h1>
+      <p class="kicker mono">An open hive · ${DATA.problems.reduce((a, p) => a + p.cases.length, 0)} records under watch</p>
+      <h1>The swarm hunts <em>world records</em>.</h1>
       <p class="lead">Lend your AI (any chatbot, Claude Code, Codex…) to a public swarm attacking open mathematical records. Every answer is checked to the last digit by code anyone can read. Beat a record and your solution becomes a one-of-a-kind trophy card, with your name on it, forever in the registry.</p>
       <div class="cta-row">
-        <a class="btn primary" href="#/hive">Start your hive →</a>
+        <a class="btn primary" href="#/hive">Start your hive ${icon('arrow')}</a>
         <a class="btn" href="#/mission">One mission, by hand</a>
       </div>
     </div>
-    ${art(heroP.p.id, heroP.cid, 600)}
+    ${plate(heroP.p.id, heroP.cid, 600, 1, 'plate hero-plate')}
   </section>
   <div class="stats">
     <div><b>${DATA.problems.reduce((a, p) => a + p.cases.length, 0)}</b><span>open cases</span></div>
@@ -162,13 +171,13 @@ function home() {
   </div>
   <div class="section-head"><h2>Three hunts are open</h2><p>Each picture is a current best.</p></div>
   <div class="fresco">
-    ${featured.map(({ p, cid }) => `<a class="tile" href="#/p/${p.id}">${art(p.id, cid, 420)}<h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p><p class="mono">${p.cases.length} cases · n = ${p.cases[0].n}–${p.cases.at(-1).n}</p></a>`).join('')}
+    ${featured.map(({ p, cid }, k) => `<a class="tile" href="#/p/${p.id}">${plate(p.id, cid, 420, k + 2)}<h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p><p class="mono">${p.cases.length} cases · n = ${p.cases[0].n}–${p.cases.at(-1).n}</p></a>`).join('')}
   </div>
   <div class="section-head"><h2>Next hunts</h2><p><a href="#/catalogue">The full catalogue, ranked by impact →</a></p></div>
   <p style="color:var(--dim);max-width:46em">Vehicle routing, factory scheduling, faster matrix products for AI chips, sorting networks, error-correcting codes, then open-source repair and formal proofs. Each one opens as soon as its judge is written.</p>
   <div class="two" style="margin-top:36px">
     <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 12).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
-    <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 12).map((l, i) => `<tr><td>${i + 1}. @${esc(l.author)}</td><td>${l.records} rec.</td><td>${l.honey} 🍯</td></tr>`).join('')}</table>` : '<p class="empty">No honey yet. Valid +1, swarm record +10, perfect +25, world record +100.</p>'}</div>
+    <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 12).map((l, i) => `<tr><td>${i + 1}. @${esc(l.author)}</td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet. Valid +1, swarm record +10, perfect +25, world record +100.</p>'}</div>
   </div>`;
   hydrate();
 }
@@ -265,9 +274,9 @@ function casePage(pid, cid) {
   app.innerHTML = `
   <p class="crumbs"><a href="#/">Hunts</a> / <a href="#/p/${p.id}">${esc(p.title)}</a> / n = ${c.n}</p>
   <div class="casepage">
-    <div>${art(pid, cid, 700, 'bigart')}</div>
+    <div>${plate(pid, cid, 700, s.seq ?? '—', 'plate big')}</div>
     <div>
-      <h1>${esc(p.title)} · n = ${c.n}</h1>
+      <h1>${esc(p.title)}, <em>n</em> = ${c.n}</h1>
       <div>${tierBadge(s.tier)}</div>
       <dl class="facts">
         <dt>Current best</dt><dd>${s.score ? `${esc(shortScore(s.score))} · ${s.credit ? `${esc(s.credit)} (found by @${esc(s.author)})` : `@${esc(s.author)}`}` : 'none yet'}</dd>
@@ -303,9 +312,10 @@ function missionPage(only, onlyCase) {
   app.innerHTML = `
   <p class="crumbs"><a href="#/">Hunts</a> / Mission</p>
   <div class="casepage">
-    <div>${art(p.id, c.id, 700, 'bigart')}</div>
+    <div>${plate(p.id, c.id, 700, 'M', 'plate big')}</div>
     <div>
-      <h1>Your mission: ${esc(p.title)}, n = ${c.n}</h1>
+      <p class="kicker mono">Your mission</p>
+      <h1>${esc(p.title)}, <em>n</em> = ${c.n}</h1>
       <p style="color:var(--dim)">Picked for you among the cases tried least, so the swarm does not pile up on the same spot. ${s.score ? `Current best: <span class="mono">${esc(shortScore(s.score))}</span> by @${esc(s.author)}.` : 'Nobody has a solution here yet.'}</p>
       <div class="strategy"><b>Your strategy</b><br>${esc(m.strategy)}</div>
       <ol class="steps">

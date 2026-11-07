@@ -218,3 +218,78 @@ label.row { justify-content: space-between; }
 .hivelog time { margin: 0 8px 0 0; }
 
 .t-known { color: #7fd1c4; }
+
+/* ===== Art direction: the observatory notebook ===== */
+:root { --paper-line: color-mix(in srgb, var(--ink) 9%, transparent); }
+body {
+  background:
+    radial-gradient(1200px 700px at 70% -10%, color-mix(in srgb, var(--honey) 9%, transparent), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='72.75' viewBox='0 0 28 48.5'%3E%3Cpath d='M14 0l14 8.1v16.2L14 32.4 0 24.3V8.1zM14 32.4v16.1' fill='none' stroke='%23ffffff' stroke-opacity='0.028'/%3E%3C/svg%3E"),
+    var(--bg);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) body {
+    background:
+      radial-gradient(1200px 700px at 70% -10%, color-mix(in srgb, var(--honey) 10%, transparent), transparent 60%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='72.75' viewBox='0 0 28 48.5'%3E%3Cpath d='M14 0l14 8.1v16.2L14 32.4 0 24.3V8.1zM14 32.4v16.1' fill='none' stroke='%23000000' stroke-opacity='0.04'/%3E%3C/svg%3E"),
+      var(--bg);
+  }
+}
+h1 em, h2 em, h3 em { font-style: italic; font-weight: 400; color: var(--honey); }
+h1 { letter-spacing: -0.025em; }
+.kicker { color: var(--honey); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 14px; }
+.ic { width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none; }
+.btn .ic { width: 18px; height: 18px; }
+.icon-btn { padding: 10px 12px; }
+.honey { color: var(--dim); font-family: var(--sans); font-size: 12px; }
+
+/* Plates: a drawing with corner ticks and a caption, like a figure in a field notebook. */
+.plate { margin: 0; position: relative; padding: 18px 18px 12px; border-radius: 6px; color: var(--ink);
+  background:
+    linear-gradient(var(--faint), var(--faint)) left top / 16px 1.5px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) left top / 1.5px 16px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) right top / 16px 1.5px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) right top / 1.5px 16px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) left bottom / 16px 1.5px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) left bottom / 1.5px 16px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) right bottom / 16px 1.5px no-repeat,
+    linear-gradient(var(--faint), var(--faint)) right bottom / 1.5px 16px no-repeat,
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--bg2) 85%, transparent), transparent 75%);
+}
+.plate .art { aspect-ratio: 1; display: grid; place-items: center; }
+.plate .art svg { width: 100%; height: 100%; }
+.plate figcaption { margin-top: 10px; font: italic 14px/1.4 var(--serif); color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.plate figcaption i { color: var(--faint); }
+.plate figcaption .mono { font-style: normal; font-size: 12px; color: var(--honey); margin-left: auto; }
+.hero .plate.hero-plate { border: 0; background-color: transparent; }
+.hero .art { border: 0; background: none; padding: 0; }
+.tile .plate { padding: 12px 12px 6px; }
+.tile .plate figcaption { font-size: 12px; }
+.plate.big { padding: 22px 22px 14px; }
+.case .art { background: color-mix(in srgb, var(--bg2) 80%, transparent); border-radius: 4px; }
+
+/* The hive button: the bee in its cell, with one orbiting dot per worker. */
+.go { position: relative; min-width: 220px; padding: 22px 28px 18px; border-radius: 28px; background: color-mix(in srgb, var(--card) 85%, transparent); }
+.orbit { position: relative; width: 84px; height: 84px; display: grid; place-items: center; color: var(--honey); }
+.go.on .orbit { color: #1a1206; }
+.bee-mark { width: 46px; height: 46px; }
+.orbit i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: currentColor; opacity: .75;
+  transform: rotate(calc(var(--k) * 360deg / var(--n))) translateY(-40px); }
+.go.on .orbit { animation: orbit 9s linear infinite; }
+.go.on .orbit .bee-mark { animation: counter 9s linear infinite, hover 1.6s ease-in-out infinite; }
+@keyframes orbit { to { transform: rotate(360deg); } }
+@keyframes counter { to { transform: rotate(-360deg); } }
+@keyframes hover { 50% { translate: 0 -2px; } }
+@media (prefers-reduced-motion: reduce) { .go.on .orbit, .go.on .orbit .bee-mark { animation: none; } }
+.preset .pi, .src .pi { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--line); color: var(--honey); }
+.preset .pi .ic { width: 22px; height: 22px; }
+.preset.sel .pi { background: var(--honey); color: #1a1206; border-color: var(--honey); }
+.mode .ic, .hint .ic { color: var(--honey); }
+.slotcard .ic { color: var(--honey); margin-right: 4px; }
+.feed .ic { color: var(--honey); }
+
+/* Calmer chrome */
+.panel, .tile, .case, .preset { background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(2px); }
+.stats div { background: color-mix(in srgb, var(--bg2) 90%, transparent); }
+.stats b { font-weight: 400; font-size: 34px; }
+.section-head h2 { font-weight: 400; }

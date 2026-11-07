@@ -10,6 +10,9 @@ import { pickMission } from './lib/mission.mjs';
 import { fromPreset, inWindow, PRESETS, ruleCommand } from './lib/presets.mjs';
 import { extractSearcher, searcherPrompt } from './lib/searchgen.mjs';
 import { agentSetupPrompt } from './lib/agentprompt.mjs';
+import { BEE, icon } from './icons.mjs';
+
+const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const store = {
@@ -255,26 +258,26 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       <div>
         <p class="crumbs"><a href="#/">Hunts</a> / Your hive</p>
         <h1>Your hive</h1>
-        ${!local ? `<p class="hint">${window.__ksInstall ? '<button class="btn small" id="installapp">📲 Install the app</button>' : /iphone|ipad/i.test(navigator.userAgent) ? '📲 To install: Share, then “Add to Home Screen”.' : '📲 Install it from your browser menu (“Install app” or “Add to Home screen”).'}</p>` : ''}
-        <p class="mode">${local ? '🖥️ Local hive on this computer: every core, your models, keys and subscriptions.' : '📱 Browser hive on this device: runs in this tab. For the full power of a computer, see "On a computer" below.'}</p>
+        ${!local ? `<p class="hint">${window.__ksInstall ? `<button class="btn small" id="installapp">${icon('install')} Install the app</button>` : /iphone|ipad/i.test(navigator.userAgent) ? `${icon('install')} To install: Share, then “Add to Home Screen”.` : `${icon('install')} Install it from your browser menu (“Install app” or “Add to Home screen”).`}</p>` : ''}
+        <p class="mode">${local ? `${icon('laptop')} Local hive on this computer: every core, your models, keys and subscriptions.` : `${icon('phone')} Browser hive on this device: it runs in this tab. For the full power of a computer, see “On a computer” below.`}</p>
       </div>
-      <button class="go ${h.running ? 'on' : ''}" id="go" aria-pressed="${h.running}"><span class="bee">🐝</span><b>${h.running ? (h.stopping ? 'Stopping…' : h.waiting ? 'Waiting for its hours' : 'Hunting') : 'Start'}</b><small>${h.running ? 'tap to stop' : `${s.workers} worker${s.workers > 1 ? 's' : ''} · ${esc(PRESETS[s.preset]?.label ?? 'custom')}`}</small></button>
+      <button class="go ${h.running ? 'on' : ''}" id="go" aria-pressed="${h.running}"><span class="orbit" style="--n:${Math.min(12, s.workers)}">${BEE}${Array.from({ length: Math.min(12, s.workers) }, (_, k) => `<i style="--k:${k}"></i>`).join('')}</span><b>${h.running ? (h.stopping ? 'Stopping…' : h.waiting ? 'Waiting for its hours' : 'Hunting') : 'Start'}</b><small>${h.running ? 'tap to stop' : `${s.workers} worker${s.workers > 1 ? 's' : ''} · ${esc(PRESETS[s.preset]?.label ?? 'custom')}`}</small></button>
     </div>
 
     <div class="voice">
-      <button class="btn" id="mic" title="Speak">🎙️</button>
+      <button class="btn icon-btn" id="mic" title="Speak" aria-label="Speak a command">${icon('mic')}</button>
       <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
       <button class="btn" id="cmdgo">Go</button>
     </div>
     <div id="proposal"></div>
 
     <h2>Presets</h2>
-    <div class="presets">${Object.entries(st.presets).map(([k, p]) => `<button class="preset ${s.preset === k ? 'sel' : ''}" data-preset="${k}"><span>${p.emoji}</span><b>${esc(p.label)}</b><small>${esc(p.blurb)}</small></button>`).join('')}</div>
+    <div class="presets">${Object.entries(st.presets).map(([k, p]) => `<button class="preset ${s.preset === k ? 'sel' : ''}" data-preset="${k}"><span class="pi">${icon(PRESET_ICON[k])}</span><b>${esc(p.label)}</b><small>${esc(p.blurb)}</small></button>`).join('')}</div>
 
     <div class="two" style="margin-top:28px">
       <section class="panel">
         <h3>What you give</h3>
-        <div class="src on"><span>🧠</span><div><b>${TIER_LABEL.cpu}</b><small>${esc(inv.machine.cores)} cores${inv.machine.cpu ? ` · ${esc(inv.machine.cpu)}` : ''}${inv.machine.memoryGb ? ` · ${esc(inv.machine.memoryGb)} GB` : ''}${inv.machine.gpu?.length ? ` · GPU ${esc(inv.machine.gpu.join(', '))}` : ''}</small></div>
+        <div class="src on"><span class="pi">${icon('cpu')}</span><div><b>${TIER_LABEL.cpu}</b><small>${esc(inv.machine.cores)} cores${inv.machine.cpu ? ` · ${esc(inv.machine.cpu)}` : ''}${inv.machine.memoryGb ? ` · ${esc(inv.machine.memoryGb)} GB` : ''}${inv.machine.gpu?.length ? ` · GPU ${esc(inv.machine.gpu.join(', '))}` : ''}</small></div>
           <label class="num">workers <input type="range" min="1" max="${st.cores}" value="${s.workers}" id="workers"><output>${s.workers}</output></label></div>
         ${['local', 'free', 'paid', 'sub'].map((t) => `
           <div class="tier"><label class="switch"><input type="checkbox" data-tier="${t}" ${s.tiers?.[t] !== false ? 'checked' : ''}><span></span></label><b>${TIER_LABEL[t]}</b><small>${s.quotas?.[t] ?? 0} calls/day per source</small></div>
@@ -292,7 +295,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         <label class="row">Minutes per search <input type="number" min="1" max="60" value="${Math.round((s.seconds ?? 120) / 60) || 1}" id="minutes"></label>
         ${['local', 'free', 'paid', 'sub'].map((t) => `<label class="row">${TIER_LABEL[t]}: calls per day <input type="number" min="0" max="100000" value="${s.quotas?.[t] ?? 0}" data-quota="${t}"></label>`).join('')}
         <div class="row"><label class="switch"><input type="checkbox" id="sched" ${s.schedule?.enabled ? 'checked' : ''}><span></span></label> Only between <input type="time" id="from" value="${esc(s.schedule?.from ?? '23:00')}"> and <input type="time" id="to" value="${esc(s.schedule?.to ?? '07:00')}"></div>
-        ${local ? `<div class="row">${st.schedule?.installed ? '✅ Runs every night on this computer, even with this page closed. <button class="btn small" id="unsched">Remove</button>' : '<button class="btn small" id="install">Run every night on this computer</button><small class="hint">Creates a scheduled task (Windows Task Scheduler or cron) at the start time above. You can remove it here.</small>'}</div>` : ''}
+        ${local ? `<div class="row">${st.schedule?.installed ? 'Runs every night on this computer, even with this page closed. <button class="btn small" id="unsched">Remove</button>' : '<button class="btn small" id="install">Run every night on this computer</button><small class="hint">Creates a scheduled task (Windows Task Scheduler or cron) at the start time above. You can remove it here.</small>'}</div>` : ''}
         ${local ? `<div class="row"><label class="switch"><input type="checkbox" id="autosub" ${s.submit !== 'none' ? 'checked' : ''}><span></span></label> Publish improvements automatically on GitHub (with your GitHub CLI login). Off: they wait in hunts/outbox.</div>` : '<div class="row hint">In the browser, each improvement waits for your click on Submit.</div>'}
         <div class="row hunts">Hunts: ${DATA.problems.map((p) => `<label><input type="checkbox" data-problem="${p.id}" ${!s.problems?.length || s.problems.includes(p.id) ? 'checked' : ''}> ${esc(p.title)}</label>`).join('')}</div>
       </section>
@@ -301,12 +304,12 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     <div class="two" style="margin-top:24px">
       <section class="panel">
         <h3>Right now</h3>
-        <div class="slots">${h.active?.length ? h.active.map((a) => `<div class="slotcard"><b>#${a.slot + 1}</b> ${a.phase === 'writing' ? `✍️ ${esc(a.source)} writes a searcher` : `🔎 ${esc(DATA.problems.find((p) => p.id === a.problem)?.title)} n=${esc(a.case)}`}${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div>` : ''}</div>`).join('') : `<p class="empty">${h.running ? 'Starting…' : 'Idle. Press Start.'}</p>`}</div>
+        <div class="slots">${h.active?.length ? h.active.map((a) => `<div class="slotcard"><b>#${a.slot + 1}</b> ${a.phase === 'writing' ? `${icon('pen')} ${esc(a.source)} writes a searcher` : `${icon('search')} ${esc(DATA.problems.find((p) => p.id === a.problem)?.title)}, n = ${esc(a.case)}`}${a.until ? `<div class="bar"><i style="animation-duration:${Math.max(1, Math.round((a.until - Date.now()) / 1000))}s"></i></div>` : ''}</div>`).join('') : `<p class="empty">${h.running ? 'Starting…' : 'Idle. Press Start.'}</p>`}</div>
         <ul class="feed hivelog" id="log">${logLines.slice(0, 40).map((l) => `<li><time>${l.t.slice(11, 19)}</time> ${l.slot === null ? '' : `<b>#${l.slot + 1}</b> `}${esc(l.msg)}</li>`).join('')}</ul>
       </section>
       <section class="panel">
         <h3>Your improvements</h3>
-        ${h.improvements?.length ? `<ul class="feed">${h.improvements.map((x, k) => `<li><span>🐝 <b>${esc(x.title)} n=${esc(x.case)}</b> ${esc(shortScore(x.score))}${x.previous ? ` <small>(was ${esc(shortScore(x.previous))})</small>` : ''}<br><small>${esc(x.source)} · ${esc(x.status)}</small></span>${x.sub ? `<button class="btn small" data-submit="${k}">Submit</button>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet. Records found by your hive land here.</p>'}
+        ${h.improvements?.length ? `<ul class="feed">${h.improvements.map((x, k) => `<li><span>${icon('hive')} <b>${esc(x.title)}, n = ${esc(x.case)}</b> ${esc(shortScore(x.score))}${x.previous ? ` <small>(was ${esc(shortScore(x.previous))})</small>` : ''}<br><small>${esc(x.source)} · ${esc(x.status)}</small></span>${x.sub ? `<button class="btn small" data-submit="${k}">Submit</button>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Nothing yet. Records found by your hive land here.</p>'}
       </section>
     </div>
 
@@ -387,9 +390,9 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const r = new SR();
       r.lang = navigator.language || 'en-US';
       r.interimResults = false;
-      $('#mic').textContent = '⏺️';
+      $('#mic').innerHTML = icon('rec');
       r.onresult = (e) => { const t = e.results[0][0].transcript; $('#cmd').value = t; run(t); };
-      r.onend = () => ($('#mic').textContent = '🎙️');
+      r.onend = () => ($('#mic').innerHTML = icon('mic'));
       r.start();
     };
   }
@@ -404,7 +407,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       if (ul) ul.insertAdjacentHTML('afterbegin', `<li><time>${d.t.slice(11, 19)}</time> ${d.slot === null ? '' : `<b>#${d.slot + 1}</b> `}${esc(d.msg)}</li>`);
       return;
     }
-    if (ev === 'improve') toast(`🐝 New record: ${d.title} n=${d.case}`);
+    if (ev === 'improve') toast(`New record: ${d.title}, n = ${d.case}`);
     st = { ...st, hive: { ...st.hive, ...(ev === 'improve' ? {} : d) } };
     if (ev === 'improve') be.state().then((x) => { st = x; render(); });
     else if (!app.contains(document.activeElement) || document.activeElement === document.body || document.activeElement.id === 'go') render();

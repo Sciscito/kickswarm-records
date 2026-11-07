@@ -104,5 +104,5 @@ test('a better solution known elsewhere is credited to its authors and becomes t
   assert.equal(r.tier, 'known');
   assert.equal(r.entry.honey, 2);
   assert.equal(r.entry.credit, 'H. Dudeney (1917)');
-  assert.match(readFileSync(`trophies/${r.entry.seq}.svg`, 'utf8'), /H. Dudeney \(1917\) · found by @scout/);
+  assert.match(readFileSync(`trophies/${r.entry.seq}.svg`, 'utf8'), /H. Dudeney \(1917\), found by @scout/);
 });
