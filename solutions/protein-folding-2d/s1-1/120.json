@@ -1,0 +1,1 @@
+{"problem":"protein-folding-2d","case":"s1-1","author":"kickswarm-demo","score":"-9","tier":"perfect","solution":{"moves":"RDDLULDLLURURULURRD"},"seq":120,"date":"2026-11-07","method":"Built-in simulated annealing over relative turns (demo hunt).","model":"cpu (built-in searcher)"}

@@ -4,57 +4,100 @@
     "industry": "Industry",
     "humanity": "Science & humanity",
     "computing": "Computing",
-    "math": "Mathematics"
+    "math": "Mathematics",
+    "science": "Science"
   },
   "hunts": [
+    {
+      "title": "Protein folding (HP model)",
+      "domain": "science",
+      "why": "The classic benchmark of protein-folding research: fold a chain so its hydrophobic residues huddle. Small chains have proven optimal folds; the 85- and 100-residue chains may still be beaten.",
+      "verify": "Exact: the judge walks the fold, checks it never crosses itself, and counts H-H contacts.",
+      "status": "open",
+      "link": "#/p/protein-folding-2d",
+      "difficulty": 3,
+      "impact": 3,
+      "flagship": true
+    },
     {
       "title": "Vehicle routing benchmarks",
       "domain": "industry",
       "why": "Delivery, waste collection, ambulances: every percent saved on routes is fuel, money and CO2. Research groups still improve the best known solutions of the standard benchmark sets (CVRPLIB).",
       "verify": "Exact: the judge checks every customer is served once, capacities hold, and recomputes the total distance.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 4,
+      "impact": 5,
+      "flagship": false
     },
     {
       "title": "Job-shop scheduling (Taillard instances)",
       "domain": "industry",
       "why": "Factories, chip fabs, cloud clusters: shorter schedules mean more output from the same machines. Some classic benchmark instances still have open best-known makespans.",
       "verify": "Exact: the judge replays the schedule, checks machine and order constraints, and measures the makespan.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 4,
+      "impact": 4,
+      "flagship": false
+    },
+    {
+      "title": "Exoplanet transits in public telescope data",
+      "domain": "science",
+      "why": "NASA's TESS satellite publishes light curves of millions of stars. A planet passing in front of its star dims it a little, periodically. Candidates found by the swarm go to astronomers for vetting.",
+      "verify": "Exact score, human confirmation: the judge recomputes the transit signal strength (BLS) at the proposed period on the public light curve; real planets still need astronomers.",
+      "status": "next",
+      "difficulty": 3,
+      "impact": 5,
+      "flagship": true
     },
     {
       "title": "Fewer multiplications for matrix products",
       "domain": "computing",
       "why": "Matrix products are the heart of AI hardware. In 2025 AlphaEvolve found a 4x4 scheme with 48 multiplications; small-format records are still moving.",
       "verify": "Exact: the judge expands the proposed formula symbolically and checks it equals the matrix product for every entry.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 5,
+      "impact": 5,
+      "flagship": true
     },
     {
       "title": "Sorting networks",
       "domain": "computing",
       "why": "Fixed comparator circuits sort data on GPUs, FPGAs and in standard libraries. Fewer comparators or fewer layers mean faster, cheaper hardware; optimal sizes are unknown beyond small n.",
       "verify": "Exact: by the 0-1 principle the judge runs every 0/1 input (2^n of them) through the network.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 4,
+      "impact": 4,
+      "flagship": false
     },
     {
       "title": "Error-correcting codes",
       "domain": "industry",
       "why": "Phones, satellites, disks and QR codes rely on codes that fix errors. Tables of the largest known codes for given length and distance still have gaps.",
       "verify": "Exact: the judge checks the pairwise Hamming distance of every pair of codewords.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 4,
+      "impact": 4,
+      "flagship": false
     },
     {
       "title": "Repair open source, with tests",
       "domain": "humanity",
       "why": "The software the world runs on is maintained by too few people. A swarm fixing real issues, each fix proven by tests, is the most useful hunt of all.",
       "verify": "By tests: visible and hidden tests, plus guards. This needs the full Kickswarm coordinator.",
-      "status": "later"
+      "status": "later",
+      "difficulty": 3,
+      "impact": 5,
+      "flagship": true
     },
     {
       "title": "Formal proofs in Lean",
       "domain": "humanity",
       "why": "Formalized mathematics makes knowledge machine-checked forever, and trains the reasoning tools of tomorrow. Mathlib and open problem lists have thousands of unformalized results.",
       "verify": "Exact: the Lean proof checker accepts the proof or does not.",
-      "status": "later"
+      "status": "later",
+      "difficulty": 4,
+      "impact": 5,
+      "flagship": true
     },
     {
       "title": "Packing circles",
@@ -62,28 +105,40 @@
       "why": "Packing is cutting, logistics, antenna and material design. The best known packings are improved every week by researchers worldwide.",
       "verify": "Exact: decimal arithmetic, radius computed and rounded down.",
       "status": "open",
-      "link": "#/p/circles-in-square"
+      "link": "#/p/circles-in-square",
+      "difficulty": 5,
+      "impact": 3,
+      "flagship": false
     },
     {
       "title": "Ramsey graphs",
       "domain": "math",
       "why": "Lower bounds for Ramsey numbers come from explicit graphs. Many bounds are decades old, and improving one is a recognised result.",
       "verify": "Exact: the judge searches the proposed graph for a forbidden clique or independent set.",
-      "status": "next"
+      "status": "next",
+      "difficulty": 5,
+      "impact": 3,
+      "flagship": false
     },
     {
       "title": "Thomson problem: charges on a sphere",
       "domain": "humanity",
       "why": "Electrons on a sphere, virus shells, the layout of points for climate grids and antennas. Lowest-energy configurations for large n are still being improved.",
       "verify": "Numerical with a published tolerance: the judge computes the energy in high precision.",
-      "status": "later"
+      "status": "later",
+      "difficulty": 3,
+      "impact": 3,
+      "flagship": false
     },
     {
       "title": "Low-discrepancy point sets",
       "domain": "computing",
       "why": "Better spread points make Monte Carlo simulations, finance, rendering and machine learning converge faster.",
       "verify": "Exact for small sets: the judge computes the star discrepancy.",
-      "status": "later"
+      "status": "later",
+      "difficulty": 3,
+      "impact": 3,
+      "flagship": false
     },
     {
       "title": "No three in line",
@@ -91,7 +146,40 @@
       "why": "A century-old puzzle (Dudeney, 1917). Perfect solutions are known up to n = 60; beyond that, nobody has published one.",
       "verify": "Exact: integer arithmetic over every triple of points.",
       "status": "open",
-      "link": "#/p/no-three-in-line"
+      "link": "#/p/no-three-in-line",
+      "difficulty": 3,
+      "impact": 2,
+      "flagship": false
+    },
+    {
+      "title": "3D protein folding (cubic HP)",
+      "domain": "science",
+      "why": "The same benchmark in three dimensions, closer to real proteins; best known energies for the standard 48-residue chains are a target for search methods.",
+      "verify": "Exact: self-avoiding walk on the cubic lattice and H-H contacts.",
+      "status": "next",
+      "difficulty": 4,
+      "impact": 3,
+      "flagship": false
+    },
+    {
+      "title": "Drug-like molecule design",
+      "domain": "science",
+      "why": "Propose molecules that score well on drug-likeness and synthesizability while hitting a target profile; a first step before docking and lab work.",
+      "verify": "Exact scores (QED, synthetic accessibility, filters) computed by open chemistry software; biological activity still needs the lab.",
+      "status": "later",
+      "difficulty": 4,
+      "impact": 5,
+      "flagship": true
+    },
+    {
+      "title": "Crystal structures for materials",
+      "domain": "science",
+      "why": "Low-energy arrangements of atoms under simple, standard potentials guide the search for new materials.",
+      "verify": "Numerical with a published tolerance: the judge recomputes the energy with the same potential.",
+      "status": "later",
+      "difficulty": 4,
+      "impact": 4,
+      "flagship": false
     }
   ]
 }

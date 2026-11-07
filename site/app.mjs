@@ -3,6 +3,7 @@ import { better, shortScore, toUnits } from './lib/exact.mjs';
 import { drawSolution, TIERS } from './lib/render.mjs';
 import { huntPrompt, pickMission } from './lib/mission.mjs';
 import { BEE, icon } from './icons.mjs';
+import { BADGES, RARITY, medal } from './lib/badges.mjs';
 
 const app = document.getElementById('app');
 let DATA;
@@ -102,17 +103,19 @@ async function paint(el) {
   const rec = await getSolution(pid, cid);
   if (!rec) {
     // An empty case: the bare grid, waiting for its first points.
-    el.innerHTML = pid === 'no-three-in-line' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { tier: 'valid', mono: true }) : '<span class="q">?</span>';
+    el.innerHTML = pid === 'no-three-in-line' ? drawSolution(pid, c.n, { points: [] }, Number(size) || 300, { tier: 'valid', mono: true })
+      : pid === 'protein-folding-2d' ? drawSolution(pid, c.n, { moves: 'R'.repeat(c.n - 1) }, Number(size) || 300, { tier: 'valid', mono: true, sequence: c.sequence })
+      : '<span class="q">?</span>';
     return;
   }
   const tier = rec.tier ?? (rec.reference ? 'reference' : 'valid');
-  el.innerHTML = drawSolution(pid, c.n, rec.solution, Number(size) || 300, { tier, radius: p.score_name === 'radius' ? Number(rec.score) : undefined, mono: tier === 'valid' });
+  el.innerHTML = drawSolution(pid, c.n, rec.solution, Number(size) || 300, { tier, radius: p.score_name === 'radius' ? Number(rec.score) : undefined, mono: tier === 'valid', sequence: c.sequence });
 }
 /** A drawing framed as a plate of the observatory notebook, with its caption. */
 const plate = (pid, cid, size, fig, cls = 'plate') => {
   const p = problem(pid);
   const s = summary(pid, cid);
-  const val = s.score ? `${p.score_name === 'radius' ? 'r' : 'points'} = ${shortScore(s.score)}` : 'open';
+  const val = s.score ? `${p.score_name === 'radius' ? 'r' : p.score_name === 'energy' ? 'E' : 'points'} = ${shortScore(s.score)}` : 'open';
   return `<figure class="${cls}">${art(pid, cid, size, 'art')}<figcaption><i>Fig. ${esc(fig)}</i> ${esc(p.title)}, <i>n</i> = ${esc(cid)} <span class="mono">${esc(val)}</span></figcaption></figure>`;
 };
 const art = (pid, cid, size = 300, cls = 'art') => `<div class="${cls}" data-art data-pid="${pid}" data-cid="${cid}" data-size="${size}"></div>`;
@@ -154,6 +157,7 @@ function home() {
     'circles-in-square': 'Researchers improve these packings every week. Start from the published best and push one circle a hair further.',
     'circles-in-circle': 'Same game, round arena. The published records are the starting line; the judge rounds down, so a record is a record.',
     'no-three-in-line': 'A puzzle from 1917. Perfect solutions are known up to n = 60. Above that, nobody has ever published one.',
+    'protein-folding-2d': 'The classic benchmark of protein folding research. Fold a chain so its water-fearing parts huddle; for the 85- and 100-residue chains, the best known folds can still be beaten.',
   };
   const dots = Array.from({ length: 6 }, (_, k) => `<i style="--k:${k}"></i>`).join('');
   app.innerHTML = `
@@ -339,7 +343,7 @@ function problemPage(pid) {
     ${p.cases.map((c) => {
       const s = summary(p.id, c.id);
       const world = p.id === 'no-three-in-line' && !c.world;
-      return `<a class="case" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">n = ${c.n}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
+      return `<a class="case" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">${p.id === 'protein-folding-2d' ? `${esc(c.id.toUpperCase())} · ${c.n} aa` : `n = ${c.n}`}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : p.id === 'protein-folding-2d' ? `best ${esc(c.world.score)}${c.proven ? '' : ' · open'}` : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
     }).join('')}
   </div>`;
   hydrate();
@@ -353,7 +357,10 @@ function predict(p, c, score, s) {
     if (!better(score, s.score, p.direction)) return { tier: 'attempt', text: `does not beat the current best (${shortScore(s.score)}). It will be logged as an attempt in the journal.` };
     if (toUnits(score) - toUnits(s.score) < toUnits(minGain)) return { tier: 'attempt', text: `is above the current best by less than the minimum step (${minGain}). It will be logged as an attempt.` };
   }
-  if (p.id === 'no-three-in-line') {
+  if (p.id === 'protein-folding-2d') {
+    if (Number(score) < Number(c.world.score)) return { tier: 'world', text: `goes BELOW the best known energy (${c.world.score}): a WORLD RECORD!` };
+    if (Number(score) === Number(c.world.score)) return { tier: 'perfect', text: `matches the best known energy (${c.world.score}): PERFECT.` };
+  } else if (p.id === 'no-three-in-line') {
     if (Number(score) === 2 * c.n) return c.world ? { tier: 'perfect', text: 'is PERFECT (2n points).' } : { tier: 'world', text: 'is a WORLD FIRST: 2n points where none was ever published!' };
   } else {
     const w = c.world.score;
@@ -367,7 +374,7 @@ function submitBox(p, c, s) {
   return `
   <h3 style="margin-top:22px">Check your solution</h3>
   <p style="color:var(--dim);font-size:14px">Paste the JSON from your AI. The exact same judge as the robot runs here, in your browser.</p>
-  <textarea id="sol" spellcheck="false" placeholder='{"problem": "${p.id}", "case": "${c.id}", "${p.id === 'no-three-in-line' ? 'points' : 'centers'}": [...], "method": "...", "model": "..."}'></textarea>
+  <textarea id="sol" spellcheck="false" placeholder='{"problem": "${p.id}", "case": "${c.id}", "${p.id === 'no-three-in-line' ? 'points' : p.id === 'protein-folding-2d' ? 'moves' : 'centers'}": ${p.id === 'protein-folding-2d' ? '"RRUL..."' : '[...]'}, "method": "...", "model": "..."}'></textarea>
   <div class="cta-row"><button class="btn primary" id="check">Check</button><button class="btn" id="send" disabled>Submit on GitHub</button></div>
   <div id="verdict"></div>`;
 }
@@ -412,7 +419,9 @@ function casePage(pid, cid) {
   if (!c) return notFound();
   const s = summary(pid, cid);
   const j = DATA.journal[`${pid}/${cid}`] ?? [];
-  const worldLine = p.id === 'no-three-in-line'
+  const worldLine = p.id === 'protein-folding-2d'
+    ? `energy ${c.world.score}${c.proven ? ' (proven optimal)' : ' (best known: can still be beaten)'}`
+    : p.id === 'no-three-in-line'
     ? c.world ? `${2 * c.n} points (perfect), published` : `never published: ${2 * c.n} points would be a world first`
     : `${c.world.score}`;
   app.innerHTML = `
@@ -501,10 +510,15 @@ function missionPage(only, onlyCase) {
 }
 
 function gallery() {
+  const holders = (id) => Object.entries(DATA.badges ?? {}).filter(([, l]) => l.includes(id)).map(([a]) => a);
   app.innerHTML = `
-  <h1>Gallery</h1>
-  <p style="color:var(--dim);max-width:44em">Every record leaves a trophy card drawn from the solution itself. No two are alike. Black and white for a first valid solution, colour for a swarm record, violet for a perfect one, animated gold for a world record.</p>
-  ${DATA.trophies.length ? `<div class="gallery">${DATA.trophies.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank" title="@${esc(t.author)} · ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}: ${esc(TIERS[t.tier]?.label)} by @${esc(t.author)}, ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">The wall is still empty. The first card could be yours: <a href="#/mission">get a mission</a>.</p>'}`;
+  <p class="kicker mono">The vault</p>
+  <h1 class="h2big" style="margin-bottom:16px">Cards and medals.<br><em>Earned, never bought.</em></h1>
+  <p class="lead dimlead" style="margin-top:0">Every record mints a card drawn from the solution itself: black and white for a first solution, colour for a swarm record, violet for a perfect one, animated gold for a world record. Medals reward the way you hunt.</p>
+  <h2 class="h3big">Medals</h2>
+  <div class="medals hall">${BADGES.map((b) => { const h = holders(b.id); return `<div class="medal ${h.length ? 'has' : 'locked'} r-${b.rarity}" title="${esc(b.desc)}">${medal(b, 84, !h.length)}<b>${esc(b.name)}</b><small>${esc(RARITY[b.rarity].label)} · ${esc(b.desc)}</small><small class="who">${h.length ? h.slice(0, 3).map((x) => `<a href="#/u/${esc(x)}">@${esc(x)}</a>`).join(' ') + (h.length > 3 ? ` +${h.length - 3}` : '') : 'nobody yet'}</small></div>`; }).join('')}</div>
+  <h2 class="h3big" style="margin-top:44px">Cards</h2>
+  ${DATA.trophies.length ? `<div class="gallery">${DATA.trophies.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank" title="@${esc(t.author)} · ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}: ${esc(TIERS[t.tier]?.label)} by @${esc(t.author)}, ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">The wall is still empty.</p>'}`;
 }
 
 function howWire() {}
@@ -549,21 +563,49 @@ function how() {
 
 async function catalogue() {
   const cat = await fetch('catalogue.json').then((r) => r.json());
-  const st = { open: ['Open now', 't-swarm'], next: ['Next', 't-perfect'], later: ['Later', 't-reference'] };
+  const stars = (k) => '★'.repeat(k) + '<span class="off">' + '★'.repeat(5 - k) + '</span>';
+  const ST = { open: ['Live', 't-swarm'], next: ['Next', 't-perfect'], later: ['Later', 't-reference'] };
+  const RAR = (h) => (h.status !== 'open' ? null : h.difficulty >= 5 ? ['Legendary', 'r-legendary'] : h.difficulty >= 4 ? ['Epic', 'r-epic'] : ['Rare', 'r-rare']);
+  const state = { domain: 'all', status: 'all', sort: 'flagship' };
   app.innerHTML = `
-  <h1>The hunt catalogue</h1>
-  <p style="color:var(--dim);max-width:46em">${esc(cat.note)}</p>
-  <div class="legend">${Object.entries(cat.domains).map(([k, v]) => `<span class="badge t-valid">${esc(v)}</span>`).join('')}</div>
-  <div class="catalogue">
-    ${cat.hunts.map((h, i) => `<article class="panel cat">
-      <div class="row"><span class="rank">${i + 1}</span><span class="badge ${st[h.status][1]}">${st[h.status][0]}</span></div>
-      <h3>${h.link ? `<a href="${esc(h.link)}">${esc(h.title)}</a>` : esc(h.title)}</h3>
-      <p class="dom">${esc(cat.domains[h.domain])}</p>
-      <p>${esc(h.why)}</p>
-      <p class="ver"><b>Verified:</b> ${esc(h.verify)}</p>
-    </article>`).join('')}
+  <p class="kicker mono">The hunts</p>
+  <h1 class="h2big" style="margin-bottom:16px">Pick your hunt.<br><em>Every one is checkable.</em></h1>
+  <p class="lead dimlead" style="margin-top:0">${esc(cat.note)} Flagships are the hunts with the biggest payoff for science and the world.</p>
+  <div class="filters">
+    <div class="chips" id="f-domain">${['all', ...Object.keys(cat.domains)].map((d) => `<button class="chip ${d === 'all' ? 'on' : ''}" data-v="${d}">${esc(d === 'all' ? 'All' : cat.domains[d])}</button>`).join('')}</div>
+    <div class="chips" id="f-status">${[['all', 'Any status'], ['open', 'Live now'], ['next', 'Next'], ['later', 'Later']].map(([v, l]) => `<button class="chip ${v === 'all' ? 'on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>
+    <label class="sortby">Sort <select id="f-sort"><option value="flagship">Flagships first</option><option value="impact">Impact</option><option value="easy">Easiest first</option><option value="hard">Hardest first</option></select></label>
   </div>
-  <p style="color:var(--dim);margin-top:20px">Know a problem with an exact judge that matters? Open an issue on the repository: the best proposals become the next hunts.</p>`;
+  <div class="hub" id="hub"></div>
+  <p style="color:var(--dim);margin-top:24px">Know a problem with an exact judge that matters? Open an issue on the repository: the best proposals become the next hunts.</p>`;
+  const draw = () => {
+    let list = cat.hunts.filter((h) => (state.domain === 'all' || h.domain === state.domain) && (state.status === 'all' || h.status === state.status));
+    const by = { flagship: (a, b) => (b.flagship - a.flagship) || (b.status === 'open') - (a.status === 'open') || b.impact - a.impact, impact: (a, b) => b.impact - a.impact, easy: (a, b) => a.difficulty - b.difficulty, hard: (a, b) => b.difficulty - a.difficulty };
+    list = list.sort(by[state.sort]);
+    document.getElementById('hub').innerHTML = list.map((h) => {
+      const r = RAR(h);
+      const live = h.status === 'open' && h.link?.startsWith('#/p/') ? h.link.split('/')[2] : null;
+      const p = live && problem(live);
+      return `<article class="hcard ${h.flagship ? 'flag' : ''} ${h.status}">
+        ${h.flagship ? '<span class="flagtag mono">Flagship</span>' : ''}
+        ${p ? `<a class="hthumb" href="${esc(h.link)}">${art(p.id, (DATA.feed.find((e) => e.problem === p.id && e.nature === 'record')?.case) ?? p.cases[Math.floor(p.cases.length / 2)].id, 260)}</a>` : `<div class="hthumb ghost"><span>${esc(cat.domains[h.domain] ?? '')}</span></div>`}
+        <div class="hbody">
+          <div class="hmeta"><span class="badge ${ST[h.status][1]}">${ST[h.status][0]}</span>${r ? `<span class="rar-tag ${r[1]}">${r[0]} rewards</span>` : ''}<span class="dom mono">${esc(cat.domains[h.domain] ?? h.domain)}</span></div>
+          <h3>${h.link ? `<a href="${esc(h.link)}">${esc(h.title)}</a>` : esc(h.title)}</h3>
+          <p>${esc(h.why)}</p>
+          <div class="hstats"><span title="Difficulty">Difficulty <b class="stars">${stars(h.difficulty)}</b></span><span title="Impact">Impact <b class="stars imp">${stars(h.impact)}</b></span></div>
+          <p class="ver"><b>Verified:</b> ${esc(h.verify)}</p>
+          ${h.link ? `<a class="btn primary small" href="${esc(h.link.replace('#/p/', '#/mission/'))}">Hunt it ${icon('arrow')}</a>` : ''}
+        </div>
+      </article>`;
+    }).join('') || '<p class="empty">No hunt matches these filters.</p>';
+    hydrate();
+  };
+  const chips = (id, key) => app.querySelectorAll(`#${id} .chip`).forEach((b) => (b.onclick = () => { app.querySelectorAll(`#${id} .chip`).forEach((x) => x.classList.remove('on')); b.classList.add('on'); state[key] = b.dataset.v; draw(); }));
+  chips('f-domain', 'domain');
+  chips('f-status', 'status');
+  document.getElementById('f-sort').onchange = (e) => { state.sort = e.target.value; draw(); };
+  draw();
 }
 
 /** A hunter's collection: their trophy cards, honey and records. */
@@ -582,6 +624,9 @@ function hunterPage(author) {
       <p class="mono hunter-stats"><b>${lb?.honey ?? 0}</b> honey · <b>${mine.length}</b> card${mine.length === 1 ? '' : 's'} · <a href="https://github.com/${esc(author)}" target="_blank" rel="noopener">GitHub ↗</a></p>
     </div>
   </div>
+  <h3 style="margin:18px 0 10px">Medals <small class="hint">${(DATA.badges?.[author] ?? []).length} of ${BADGES.length}</small></h3>
+  <div class="medals">${BADGES.map((b) => { const has = (DATA.badges?.[author] ?? []).includes(b.id); return `<div class="medal ${has ? 'has' : 'locked'} r-${b.rarity}" title="${esc(b.name)}: ${esc(b.desc)}">${medal(b, 74, !has)}<b>${esc(b.name)}</b><small>${has ? esc(RARITY[b.rarity].label) : esc(b.desc)}</small></div>`; }).join('')}</div>
+  <h3 style="margin:26px 0 6px">Cards</h3>
   <div class="rarity big">${Object.entries(tiers).map(([t, k]) => `<span class="rar ${k ? '' : 'none'}">${tierBadge(t)} <b class="mono">${k}</b></span>`).join('')}</div>
   ${mine.length ? `<div class="gallery">${mine.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">No card yet. <a href="#/hive">Start your hive</a>.</p>'}`;
   wireShare();

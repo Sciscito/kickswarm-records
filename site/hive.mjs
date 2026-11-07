@@ -140,7 +140,7 @@ function browserBackend(DATA) {
     return null;
   }
   const note = (key, f) => { const st = (stats[key] ??= { calls: 0, valid: 0, improved: 0, streak: 0 }); if (f === 'fail') st.streak++; else { st[f]++; if (f !== 'calls') st.streak = 0; } };
-  const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : 'circles'}.mjs`, location.href).href;
+  const builtinUrl = (pid) => new URL(`solvers/${pid === 'no-three-in-line' ? 'no-three-in-line' : pid === 'protein-folding-2d' ? 'protein-folding-2d' : 'circles'}.mjs`, location.href).href;
 
   /** Run a searcher in a module Web Worker: no page, no storage, no keys; stopped after its time. */
   function runInWorker(code, url, input) {
@@ -193,7 +193,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     active.set(i, { phase: 'searching', problem: p.id, case: m.cas.id, source: prog.source, until: Date.now() + seconds * 1000 });
     emit('state', snapshot());
     log(`${p.title} n=${m.cas.n} · ${prog.source} · best ${cur ? shortScore(cur.score) : 'none'}`, i);
-    const { sol, err } = await runInWorker(prog.code, prog.url, { problem: p.id, n: m.cas.n, start: cur?.solution ?? null, seconds, seed: Math.floor(Math.random() * 2 ** 31) });
+    const { sol, err } = await runInWorker(prog.code, prog.url, { problem: p.id, n: m.cas.n, ...(m.cas.sequence ? { sequence: m.cas.sequence } : {}), start: cur?.solution ?? null, seconds, seed: Math.floor(Math.random() * 2 ** 31) });
     active.delete(i);
     if (!sol) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`no improvement found${err ? `: ${err.slice(0, 120)}` : ''}`, i); }
     const { judge } = await import(`./problems/${p.id}/judge.mjs`);

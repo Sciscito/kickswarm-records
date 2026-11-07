@@ -15,7 +15,7 @@ for (const id of PROBLEMS) {
   const p = loadProblem(id);
   const judge = await loadJudge(id);
   let n = 0;
-  for (const f of readdirSync(`records/${id}`, { withFileTypes: true }).filter((d) => d.isFile())) {
+  for (const f of readdirSync(`records/${id}`, { withFileTypes: true }).filter((d) => d.isFile() && d.name.endsWith('.json'))) {
     const rec = JSON.parse(readFileSync(`records/${id}/${f.name}`, 'utf8'));
     const cas = p.cases.find((c) => c.id === rec.case);
     const { score } = judge(cas, rec.solution);

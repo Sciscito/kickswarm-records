@@ -4,6 +4,7 @@
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { loadProblem, PROBLEMS, readRecord } from '../lib/process.mjs';
 import { readRegistry } from '../lib/registry.mjs';
+import { computeBadges } from '../lib/badges.mjs';
 
 const OUT = '_site';
 rmSync(OUT, { recursive: true, force: true });
@@ -83,6 +84,7 @@ const data = {
   trophies,
   leaderboard,
   learning,
+  badges: computeBadges(reg),
   stats: {
     hunters: people.size,
     records: trophies.length,

@@ -1,0 +1,143 @@
+{
+  "id": "protein-folding-2d",
+  "title": "Protein folding (HP model)",
+  "tagline": "Fold a chain of amino acids on a grid so its water-fearing parts huddle together.",
+  "direction": "min",
+  "score_name": "energy",
+  "domain": "science",
+  "flagship": true,
+  "statement": "Each case is a protein chain written with two letters: H (hydrophobic, it avoids water) and P (polar). Fold it on a square grid: each amino acid sits on its own cell, and consecutive ones are neighbours. Every pair of H that touch on the grid without being consecutive in the chain counts -1. Lowest energy wins. This 2D HP model is a classic benchmark of protein folding research: proven optimal folds are known up to 80 amino acids; for 85 and 100, the best known energies may still be beaten.",
+  "format": "{ \"moves\": \"RRULLDR...\" }  (n-1 letters, absolute directions: R right, L left, U up, D down; the chain starts at (0,0))",
+  "world_source": {
+    "label": "Standard 2D HP benchmarks (Unger & Moult 1993; Istrail benchmark), best known energies as compiled in BMC Bioinformatics 6:30 (2005)",
+    "url": "https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-6-30/tables/2"
+  },
+  "strategies": [
+    "Monte Carlo with pull moves (local moves that keep the chain self-avoiding), at a slowly decreasing temperature.",
+    "Build the fold residue by residue with a growth method (PERM style): keep the most promising partial chains, prune the rest.",
+    "Aim for a compact hydrophobic core first: place H residues in a dense block, then route the P residues around it.",
+    "Start from the current best fold and apply crankshaft and end moves to free trapped H pairs.",
+    "Replica exchange: run several temperatures in parallel and swap configurations.",
+    "Constraint search: treat it as a self-avoiding walk problem and use branch and bound on the number of H-H contacts still possible."
+  ],
+  "cases": [
+    {
+      "id": "s1-1",
+      "n": 20,
+      "sequence": "HPHPPHHPHPPHPHHPPHPH",
+      "world": {
+        "score": "-9",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-9"
+    },
+    {
+      "id": "s1-2",
+      "n": 24,
+      "sequence": "HHPPHPPHPPHPPHPPHPPHPPHH",
+      "world": {
+        "score": "-9",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-9"
+    },
+    {
+      "id": "s1-3",
+      "n": 25,
+      "sequence": "PPHPPHHPPPPHHPPPPHHPPPPHH",
+      "world": {
+        "score": "-8",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-8"
+    },
+    {
+      "id": "s1-4",
+      "n": 36,
+      "sequence": "PPPHHPPHHPPPPPHHHHHHHPPHHPPPPHHPPHPP",
+      "world": {
+        "score": "-14",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-14"
+    },
+    {
+      "id": "s1-5",
+      "n": 48,
+      "sequence": "PPHPPHHPPHHPPPPPHHHHHHHHHHPPPPPPHHPPHHPPHPPHHHHH",
+      "world": {
+        "score": "-23",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-23"
+    },
+    {
+      "id": "s1-6",
+      "n": 50,
+      "sequence": "HHPHPHPHPHHHHPHPPPHPPPHPPPPHPPPHPPPHPHHHHPHPHPHPHH",
+      "world": {
+        "score": "-21",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-21"
+    },
+    {
+      "id": "s1-7",
+      "n": 60,
+      "sequence": "PPHHHPHHHHHHHHPPPHHHHHHHHHHPHPPPHHHHHHHHHHHHPPPPHHHHHHPHHPHP",
+      "world": {
+        "score": "-36",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-36"
+    },
+    {
+      "id": "s1-8",
+      "n": 64,
+      "sequence": "HHHHHHHHHHHHPHPHPPHHPPHHPPHPPHHPPHHPPHPPHHPPHHPPHPHPHHHHHHHHHHHH",
+      "world": {
+        "score": "-42",
+        "date": "2005"
+      },
+      "proven": true,
+      "max": "-42"
+    },
+    {
+      "id": "s1-9",
+      "n": 85,
+      "sequence": "HHHHPPPPHHHHHHHHHHHHPPPPPPHHHHHHHHHHHHPPPHHHHHHHHHHHHPPPHHHHHHHHHHHHPPPHPPHHPPHHPPHPH",
+      "world": {
+        "score": "-53",
+        "date": "2005"
+      },
+      "proven": false
+    },
+    {
+      "id": "s1-10",
+      "n": 100,
+      "sequence": "PPPHHPPHHHHPPHHHPHHPHHPHHHHPPPPPPPPHHHHHHPPHHHHHHPPPPPPPPPHPHHPHHHHHHHHHHHPPHHHPHHPHPPHPHHHPPPPPPHHH",
+      "world": {
+        "score": "-50",
+        "date": "2005"
+      },
+      "proven": false
+    },
+    {
+      "id": "s1-11",
+      "n": 100,
+      "sequence": "PPPPPPHPHHPPPPPHHHPHHHHHPHHPPPPHHPPHHPHHHHHPHHHHHHHHHHPHHPHHHHHHHPPPPPPPPPPPHHHHHHHPPHPHHHPPPPPPHPHH",
+      "world": {
+        "score": "-48",
+        "date": "2005"
+      },
+      "proven": false
+    }
+  ]
+}

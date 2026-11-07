@@ -12,8 +12,9 @@ for (const e of readRegistry().filter((x) => x.nature === 'record')) {
   if (!existsSync(f)) continue;
   const rec = JSON.parse(readFileSync(f, 'utf8'));
   const p = loadProblem(e.problem);
-  const n = p.cases.find((c) => c.id === e.case)?.n ?? Number(e.case);
-  writeFileSync(`trophies/${e.seq}.svg`, trophyCard({ problem: e.problem, n, solution: rec.solution, tier: e.tier, author: e.author, score: shortScore(e.score), scoreLabel: p.score_name, date: e.ts.slice(0, 10), seq: e.seq, hash: e.hash, title: p.title, credit: e.credit }));
+  const cas = p.cases.find((c) => c.id === e.case);
+  const n = cas?.n ?? Number(e.case);
+  writeFileSync(`trophies/${e.seq}.svg`, trophyCard({ problem: e.problem, n, solution: rec.solution, tier: e.tier, author: e.author, score: shortScore(e.score), scoreLabel: p.score_name, date: e.ts.slice(0, 10), seq: e.seq, hash: e.hash, title: p.title, credit: e.credit, sequence: cas?.sequence }));
   k++;
 }
 console.log(`${k} trophy card(s) redrawn.`);

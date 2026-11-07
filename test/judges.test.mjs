@@ -5,6 +5,7 @@ import { compareScores, csqrt, fromUnits, isqrt, toUnits } from '../lib/exact.mj
 import { judge as square } from '../problems/circles-in-square/judge.mjs';
 import { judge as disc } from '../problems/circles-in-circle/judge.mjs';
 import { judge as nothree } from '../problems/no-three-in-line/judge.mjs';
+import { judge as fold } from '../problems/protein-folding-2d/judge.mjs';
 
 test('exact decimals: parse, print, square roots', () => {
   assert.equal(toUnits('0.5'), 5n * 10n ** 29n);
@@ -60,4 +61,14 @@ test('no three in line: collinear triples of any slope are caught', () => {
   assert.throws(() => nothree({ n: 3 }, { points: [[0, 0], [0, 0]] }), /twice/);
   assert.throws(() => nothree({ n: 3 }, { points: [[0, 3]] }), /integers from 0 to 2/);
   assert.throws(() => nothree({ n: 2 }, { points: [[0, 0], [0, 1], [1, 0], [1, 1], [0, 0]] }), /more than 2n/);
+});
+
+test('protein folding: self-avoiding chain, H-H contacts counted once, lower is better', () => {
+  const c = { n: 4, sequence: 'HPPH' };
+  assert.equal(fold(c, { moves: 'RUL' }).score, '-1', 'a square brings the two H together');
+  assert.equal(fold(c, { moves: 'RRR' }).score, '0');
+  assert.throws(() => fold(c, { moves: 'RLR' }), /crosses itself/);
+  assert.throws(() => fold(c, { moves: 'RU' }), /expected 3 moves/);
+  assert.throws(() => fold(c, { moves: 'RUX' }), /not R, L, U or D/);
+  assert.equal(fold({ n: 2, sequence: 'HH' }, { moves: 'R' }).score, '0', 'consecutive residues do not count');
 });
