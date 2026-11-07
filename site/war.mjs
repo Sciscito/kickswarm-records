@@ -131,11 +131,21 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick }) {
   async function poll() {
     if (!el.isConnected) return;
     hunters = await presence(DATA.config.relay);
+    // Friends you brought in: they joined through your link, so they are your friends too.
+    const mineIn = me ? hunters.filter((h) => h.by === me && h.name !== me && !friends.includes(h.name)).map((h) => h.name) : [];
+    if (mineIn.length) { friends.push(...mineIn); try { localStorage.setItem('ks-friends', JSON.stringify(friends)); } catch {} }
     paint();
     setTimeout(poll, 10000);
   }
   paint();
   poll();
+  // Outside the hive page, follow your own hive (if it runs in this app) through its events.
+  if (mode !== 'hive') {
+    const feed = (h) => { if (!el.isConnected) { removeEventListener('ks-hive', onHive); return; } localMine = h?.running ? h.active ?? [] : null; paint(); };
+    const onHive = (e) => feed(e.detail);
+    addEventListener('ks-hive', onHive);
+    window.__ksHive?.state().then((st) => feed(st.hive)).catch(() => {});
+  }
   return {
     update({ mine, stats } = {}) { if (mine) localMine = mine; if (stats) localStats = stats; paint(); },
     index,

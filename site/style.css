@@ -748,3 +748,27 @@ canvas.planet { display: block; width: 100%; max-width: min(100%, 72vh); aspect-
 .two > * { min-width: 0; }
 .two .row input, .two .row select { max-width: 100%; }
 .two .row { flex-wrap: wrap; }
+
+/* ===== Join and invite ===== */
+.joinbox { display: grid; gap: 8px; max-width: 420px; margin: 8px 0 14px; }
+.joinbox label { font-weight: 600; }
+.joinbox label small { display: block; font-weight: 400; color: var(--dim); }
+.joinbox input { font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); color: var(--ink); }
+.joinbox input:focus { outline: 2px solid var(--honey); }
+.sheet.invite { width: min(520px, 100%); }
+.invlink { display: flex; gap: 8px; }
+.invlink input { flex: 1; min-width: 0; font: 13px var(--mono); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--ink); }
+.invapps { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 10px 0 14px; }
+.invapp { display: grid; place-items: center; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); color: var(--ink); font: inherit; cursor: pointer; }
+.invapp:hover { text-decoration: none; border-color: var(--honey); }
+.invapp.wa b { color: #4fd17a; } .invapp.tg b { color: #5ab4ff; } .invapp.sms b { color: #ffd34d; }
+.invqr { display: flex; gap: 14px; align-items: center; padding: 12px; border-radius: 14px; background: #fff; color: #111; }
+.invqr [data-w="qr"] { width: 128px; height: 128px; flex: none; }
+.invqr [data-w="qr"] svg { width: 100%; height: 100%; display: block; }
+.invqr p { margin: 0; color: #222; }
+
+/* ===== Your hive, on every page ===== */
+.hivepill { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; padding: 5px 11px; border-radius: 999px; font: 600 12px var(--mono); color: #0c1a0f; background: #5fd17a; white-space: nowrap; }
+.hivepill:hover { text-decoration: none; filter: brightness(1.1); }
+.hivepill[hidden] { display: none; }
+.hivepill .pdot { background: #0c1a0f; }

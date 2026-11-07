@@ -72,7 +72,7 @@ export default {
         const owner = await env.PRESENCE.prepare('SELECT key FROM presence WHERE name = ?').bind(p.hunter.name).first();
         if (owner && owner.key !== p.hunter.key) return reply(409, { error: 'this name belongs to another hunter' });
         await env.PRESENCE.prepare('INSERT INTO presence (name, key, data, ts) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET data = ?3, ts = ?4')
-          .bind(p.hunter.name, p.hunter.key, JSON.stringify({ agents, device: String(p.device ?? '').slice(0, 20) }), now).run();
+          .bind(p.hunter.name, p.hunter.key, JSON.stringify({ agents, device: String(p.device ?? '').slice(0, 20), by: NAME_RE.test(p.by ?? '') ? p.by : undefined }), now).run();
         return reply(200, { ok: true });
       }
     }

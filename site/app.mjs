@@ -992,14 +992,9 @@ function inviteLink(pid) {
   const by = moi();
   return `${DATA.config.site}/#/join/${pid}${by ? `/${encodeURIComponent(by)}` : ''}`;
 }
-async function inviteToHunt(pid) {
+function inviteToHunt(pid) {
   const p = problem(pid);
-  const url = inviteLink(pid);
-  const text = `Join me on the ${p.title} hunt on Kickswarm: our AIs and computers team up on ${p.level === 'hardcore' ? 'an open problem nobody has solved' : 'world records'}. One click to join.`;
-  try {
-    if (navigator.share) await navigator.share({ title: `Kickswarm · ${p.title}`, text, url });
-    else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends');
-  } catch {}
+  import('./invite.mjs').then((m) => m.openInvite({ site: DATA.config.site, pid, title: p.title, by: moi(), toast }));
 }
 /** Hunters on a hunt over the last 7 days, from the public feed. */
 function huntersOn(pid) {
@@ -1017,13 +1012,38 @@ function joinLanding(pid, by) {
       <p class="kicker mono">${by ? `@${esc(by)} invites you` : 'You are invited'} · ${levelTag(p.level)}</p>
       <h1 class="display" style="font-size:clamp(46px,8vw,104px)">Join the<br><em>${esc(p.title)}</em><br>hunt.</h1>
       <p class="lead dimlead" style="margin-top:0">${esc(p.about?.what ?? p.tagline)}</p>
-      <div class="cta-row"><button class="btn primary big" id="joinnow">${icon('hive')} Join the hunt</button><a class="btn ghost big" href="#/map/${pid}">See the map</a><button class="btn ghost big" id="learn">Learn more</button></div>
-      <p class="hint">${huntersOn(pid)} hunter(s) on it this week · no account, nothing to install · free models first</p>
+      <div class="joinbox">
+        ${local.get('ks-identity', null)?.name ? `<p class="hint">You join as <b>@${esc(local.get('ks-identity', null).name)}</b>.</p>` : `<label for="jname">Your nickname <small>so ${by ? `@${esc(by)}` : 'your friends'} can see you hunting</small></label><input id="jname" maxlength="24" autocomplete="nickname" placeholder="e.g. kev" enterkeyhint="go">`}
+        <button class="btn primary big" id="joinnow">${icon('hive')} Join the hunt</button>
+        <p class="hint" id="jmsg">Nothing to install, no account: it runs right here, in your browser.</p>
+      </div>
+      <div class="cta-row"><a class="btn ghost" href="#/map/${pid}">See the map</a><button class="btn ghost" id="learn">Learn more</button></div>
+      <p class="hint">${huntersOn(pid)} hunter(s) on it this week · free models first</p>
     </div>
     ${plate(pid, fid, 600, '★', 'plate')}
   </section>`;
   hydrate();
-  document.getElementById('joinnow').onclick = () => joinHunt(pid);
+  const msg = document.getElementById('jmsg');
+  const go = async () => {
+    const input = document.getElementById('jname');
+    if (input) {
+      const name = input.value.trim();
+      if (name) {
+        if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,23}$/.test(name)) { msg.textContent = '2 to 24 letters or digits (- and _ allowed), no spaces.'; input.focus(); return; }
+        if (joueurs().some((j) => j.author.toLowerCase() === name.toLowerCase())) { msg.textContent = `@${name} is already taken: pick another nickname.`; input.focus(); return; }
+        const { createIdentity } = await import('./identity.mjs');
+        await createIdentity(name);
+      }
+    }
+    // You follow the friend who invited you, and they see you as their friend (see war.mjs).
+    if (by) {
+      local.set('ks-friends', [...new Set([...amis(), by])]);
+      local.set('ks-invited-by', by);
+    }
+    joinHunt(pid);
+  };
+  document.getElementById('joinnow').onclick = go;
+  document.getElementById('jname')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   document.getElementById('learn').onclick = () => learnProblem(p);
 }
 
@@ -1074,6 +1094,18 @@ function mapPage(pid) {
 }
 function paintBees() {}
 
+/** The pill in the header: your hive is hunting (on every page). */
+function paintPill(h) {
+  let el = document.getElementById('hivepill');
+  if (!el) {
+    el = document.createElement('a');
+    el.id = 'hivepill'; el.className = 'hivepill'; el.href = '#/hive';
+    document.querySelector('header.top .brand')?.after(el);
+  }
+  const n = (h?.active ?? []).length;
+  el.hidden = !h?.running;
+  el.innerHTML = `<i class="pdot"></i> Hunting · ${n} agent${n === 1 ? '' : 's'}`;
+}
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
@@ -1115,6 +1147,19 @@ try {
   document.getElementById('head').textContent = DATA.stats.head ? `registry head ${DATA.stats.head.slice(0, 16)} · ${DATA.stats.entries} entries` : '';
   addEventListener('hashchange', route);
   route();
+  // Your hive, everywhere: it wakes up with the app if you left it hunting, and a pill shows it on every page.
+  try { if (JSON.parse(localStorage.getItem('ks-hive-settings') ?? 'null')?.autostart) import('./hive.mjs').then((m) => m.bootHive(DATA)).catch(() => {}); } catch {}
+  addEventListener('ks-hive', (e) => paintPill(e.detail));
+  addEventListener('ks-hive-record', (e) => toast(`🐝 Your hive found a record: ${e.detail.title}, ${e.detail.case}`));
+  // Fresh results without reloading: the robot judges every 10 minutes.
+  setInterval(async () => {
+    if (document.visibilityState !== 'visible') return;
+    const d = await fetch('data.json', { cache: 'no-cache' }).then((r) => r.json()).catch(() => null);
+    if (!d || d.built === DATA.built) return;
+    DATA = d;
+    if (!/^#\/(hive|mission|join)/.test(location.hash)) route();
+    toast('New results arrived: everything is up to date');
+  }, 120000);
   pollLive();
   setInterval(() => { if (document.visibilityState === 'visible') pollLive(); }, 10000);
 } catch (e) {

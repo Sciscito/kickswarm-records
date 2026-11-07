@@ -340,13 +340,35 @@ function agentCard(a) {
 
 // ---------------------------------------------------------------------------------------------
 // The page.
+// One browser hive for the whole app: it keeps running (and keeps its state) when you open other pages,
+// and every page can follow it through the "ks-hive" window event.
+let BROWSER_BE = null;
+export function hiveEngine(DATA) {
+  if (!BROWSER_BE) {
+    BROWSER_BE = browserBackend(DATA);
+    window.__ksHive = BROWSER_BE;
+    BROWSER_BE.events((ev, d) => {
+      if (ev === 'state') dispatchEvent(new CustomEvent('ks-hive', { detail: d }));
+      if (ev === 'improve') dispatchEvent(new CustomEvent('ks-hive-record', { detail: d }));
+    });
+  }
+  return BROWSER_BE;
+}
+/** At app start: wake the hive if you left it hunting last time (Stop turns this off). */
+export async function bootHive(DATA) {
+  const be = hiveEngine(DATA);
+  const st = await be.state();
+  dispatchEvent(new CustomEvent('ks-hive', { detail: st.hive }));
+  if (st.settings.autostart && !st.hive.running) await be.start();
+}
+
 export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   SITE = DATA;
   const token = new URLSearchParams(location.search).get('t') ?? sessionStorage.getItem('ks-hive-token');
   let local = false;
   try { local = !!token && (await fetch('/api/hello', { signal: AbortSignal.timeout(1500) }).then((r) => r.json())).local; } catch {}
   if (token) sessionStorage.setItem('ks-hive-token', token);
-  const be = local ? localBackend(token) : browserBackend(DATA);
+  const be = local ? localBackend(token) : hiveEngine(DATA);
   if (new URLSearchParams(location.search).get('code')) {
     try {
       const { finishOpenRouterLogin } = await import('./openrouter.mjs');
@@ -389,13 +411,21 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         const head = slot.querySelector('.warhead');
         head?.insertAdjacentHTML('beforeend', '<div class="waract"><button class="btn primary" id="war-go"></button><button class="btn" id="war-inv">Invite a friend</button></div>');
         slot.querySelector('#war-go').onclick = () => app.querySelector('#go')?.click();
-        slot.querySelector('#war-inv').onclick = () => app.querySelector('#invite2')?.click();
+        slot.querySelector('#war-inv').onclick = () => invite();
       }
     }
     const h = st.hive;
     const goBtn = slot.querySelector('#war-go');
     if (goBtn) goBtn.textContent = h.running ? (h.stopping ? 'Stopping…' : '■ Stop the hunt') : '▶ Start hunting';
     war?.update({ mine: h.active ?? [], stats: { runs: h.runs ?? 0, records: h.improvements?.length ?? 0, active: (h.active ?? []).length } });
+  };
+
+  // Invite to the hunt your hive is on (or the warm-up hunt): a link that joins in one tap, never a setup page.
+  const invite = async () => {
+    const pid = huntNow() ?? st.settings.problems?.[0] ?? DATA.problems.find((p) => p.level === 'warm-up')?.id ?? DATA.problems[0].id;
+    const p = DATA.problems.find((x) => x.id === pid);
+    const { openInvite } = await import('./invite.mjs');
+    openInvite({ site: DATA.config.site, pid, title: p.title, by: st.identity?.name ?? getIdentity()?.name ?? null, toast });
   };
 
   const render = () => {
@@ -409,7 +439,6 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       <div>
         <p class="crumbs"><a href="#/">Hunts</a> / Your hive</p>
         <h1>Your hive</h1>
-        ${!local ? `<p class="hint">${window.__ksInstall ? `<button class="btn small" id="installapp">${icon('install')} Install the app</button>` : /iphone|ipad/i.test(navigator.userAgent) ? `${icon('install')} To install: Share, then “Add to Home Screen”.` : `${icon('install')} Install it from your browser menu (“Install app” or “Add to Home screen”).`}</p>` : ''}
         <p class="mode">${local ? `${icon('laptop')} Local hive on this computer: every core, your models, keys and subscriptions.` : `${icon('phone')} Browser hive on this device: it runs in this tab. For the full power of a computer, see “On a computer” below.`}</p>
       </div>
       <button class="go ${h.running ? 'on' : ''}" id="go" aria-pressed="${h.running}"><span class="orbit" style="--n:${Math.min(12, s.workers)}">${BEE}${Array.from({ length: Math.min(12, s.workers) }, (_, k) => `<i style="--k:${k}"></i>`).join('')}</span><b>${h.running ? (h.stopping ? 'Stopping…' : h.waiting ? 'Waiting for its hours' : 'Hunting') : 'Start'}</b><small>${h.running ? 'tap to stop' : `${s.workers} worker${s.workers > 1 ? 's' : ''} · ${esc(PRESETS[s.preset]?.label ?? 'custom')}`}</small></button>
@@ -602,18 +631,8 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     $('#unsched')?.addEventListener('click', async () => { try { const r = await be.schedule(false); st = r; render(); toast(r.message); } catch (e) { toast(e.message); } });
     app.querySelectorAll('[data-submit]').forEach((b) => (b.onclick = () => submitUrl(st.hive.improvements[Number(b.dataset.submit)].sub)));
     $('#installapp')?.addEventListener('click', async () => { await window.__ksInstall.prompt(); window.__ksInstall = null; render(); });
-    $('#invite2').onclick = async () => {
-      const url = `${DATA.config.site}/#/start`;
-      const text = 'Join my hive on Kickswarm Records: our computers and AIs hunt open math world records together. Two minutes to join.';
-      try { if (navigator.share) await navigator.share({ title: 'Kickswarm Records', text, url }); else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends'); } catch {}
-    };
-    $('#epic-invite')?.addEventListener('click', async () => {
-      const pid = st.settings.problems[0];
-      const p = DATA.problems.find((x) => x.id === pid);
-      const url = `${DATA.config.site}/#/join/${pid}`;
-      const text = `Join me on the ${p.title} hunt on Kickswarm: one click, no account.`;
-      try { if (navigator.share) await navigator.share({ title: `Kickswarm · ${p.title}`, text, url }); else await copy(`${text} ${url}`, 'Invitation copied: send it to your friends'); } catch {}
-    });
+    $('#invite2').onclick = () => invite();
+    $('#epic-invite')?.addEventListener('click', () => invite());
     $('#epic-all')?.addEventListener('click', () => patch({ problems: [] }));
     $('#copyagent').onclick = () => copy(agentSetupPrompt(), 'Setup prompt copied: paste it into your agent');
     // Commands, typed or spoken.
