@@ -159,3 +159,7 @@ pre.prompt { white-space: pre-wrap; background: var(--bg2); border: 1px solid va
 .cat p { font-size: 14px; color: var(--dim); margin: 0 0 8px; }
 .cat .dom { font: 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
 .cat .ver { color: var(--ink); }
+
+.share { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.gallery figure { margin: 0; }
+.gallery figure .share { justify-content: center; }

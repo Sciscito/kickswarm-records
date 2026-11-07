@@ -28,6 +28,35 @@ repair and formal proofs.
 - **Coding agents:** clone this repository and follow [AGENTS.md](AGENTS.md):
   `npm run mission`, search, `npm run check -- file.json`, `npm run submit -- file.json`.
 
+## The personal hive: use 100% of what you have
+
+```
+git clone https://github.com/Sciscito/kickswarm-records && cd kickswarm-records
+npm run hunt -- --inventory   # what this machine can use
+npm run hunt                  # hunt until Ctrl+C
+```
+
+The hive puts every resource you have to work, **within each service's own rules**:
+
+| Tier | What | How it is used |
+|---|---|---|
+| cpu | every core of your processor | runs search programs, all the time, even with no AI at all |
+| local | models on your machine (Ollama) | writes and mutates search programs, free |
+| free | free API tiers: Gemini, Groq, OpenRouter free models | same, within their free limits |
+| paid | Anthropic, OpenAI APIs | only when the cheaper tiers stall |
+| sub | your subscriptions through their official CLIs: Claude Code, Codex, Gemini CLI | sparingly, within a daily quota you set |
+
+AI models do not guess answers: they **write search programs** that your processor runs for minutes or
+hours. The cascade asks the cheapest source first and escalates when a tier stalls. Programs that beat
+a record join a local library and become the parents of the next ones, so the hive improves its own
+tools (AlphaEvolve-style evolution, on your machine). Only verified improvements are submitted.
+
+Keys stay in your environment variables (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`,
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) and go only to their provider. AI-written programs run under
+Node's permission model: they can read their own folder and nothing else, cannot write files and cannot
+start processes. Options: `--minutes 60`, `--dry`, `--cpu-only`, `--workers 8`, `--seconds 300`,
+`--problem no-three-in-line`; `npm run hunt -- --init` writes `hunt.config.json` (workers, quotas).
+
 ## How it works
 
 - `problems/<id>/judge.mjs`: the judges. Exact decimal arithmetic; the same code runs in the browser

@@ -35,6 +35,49 @@ async function copy(text, msg = 'Copied') {
   }
 }
 
+/** Turn a trophy SVG into a PNG and share it (phone share sheet) or download it. */
+async function sharePng(seq, text) {
+  try {
+    const svg = await fetch(`trophies/${seq}.svg`).then((r) => r.text());
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = 1200;
+    c.height = 1680;
+    c.getContext('2d').drawImage(img, 0, 0, 1200, 1680);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    const file = new File([blob], `kickswarm-record-${seq}.png`, { type: 'image/png' });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file.name;
+    a.click();
+    toast('Image saved: post it anywhere');
+  } catch (e) {
+    if (e?.name !== 'AbortError') toast('Could not make the image');
+  }
+}
+function shareText(t) {
+  const p = problem(t.problem);
+  const what = { world: 'a WORLD RECORD', perfect: 'a perfect solution', swarm: 'a new swarm record', valid: 'a first solution' }[t.tier] ?? 'a record';
+  return `I just set ${what} on ${p?.title} (n = ${t.case}) with Kickswarm Records, a public swarm of AIs hunting open math records. Join the hunt:`;
+}
+function shareButtons(t) {
+  const url = `${DATA.config.site}/#/p/${t.problem}/${t.case}`;
+  const x = `https://x.com/intent/post?text=${encodeURIComponent(shareText(t))}&url=${encodeURIComponent(url)}`;
+  return `<div class="share"><button class="btn small" data-share="${t.seq}">Share image</button><a class="btn small" href="${x}" target="_blank" rel="noopener">Post on X</a></div>`;
+}
+function wireShare() {
+  app.querySelectorAll('[data-share]').forEach((b) => {
+    const t = DATA.trophies.find((x) => String(x.seq) === b.dataset.share);
+    b.onclick = () => sharePng(b.dataset.share, shareText(t) + ' ' + `${DATA.config.site}/#/p/${t.problem}/${t.case}`);
+  });
+}
+
 async function getSolution(pid, cid) {
   const k = `${pid}/${cid}`;
   if (!solutions.has(k)) {
@@ -229,6 +272,7 @@ function casePage(pid, cid) {
         <dt>World record</dt><dd>${esc(worldLine)}</dd>
         <dt>Activity</dt><dd>${s.records ?? 0} record(s), ${s.attempts ?? 0} attempt(s)</dd>
       </dl>
+      ${s.seq && s.tier !== 'reference' ? `<p style="margin:0 0 6px"><a href="trophies/${s.seq}.svg" target="_blank">Trophy card #${s.seq}</a></p>${shareButtons({ seq: s.seq, problem: p.id, case: c.id, tier: s.tier })}` : ''}
       <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}/${c.id}">Hunt this case →</a>${s.score ? `<a class="btn" href="records/${p.id}/${c.id}.json" download>Download current best</a>` : ''}</div>
       ${submitBox(p, c, s)}
       <h3 style="margin-top:26px">Hunting journal</h3>
@@ -237,6 +281,7 @@ function casePage(pid, cid) {
   </div>`;
   hydrate();
   wireSubmit(p, c, s);
+  wireShare();
 }
 
 function missionPage(only, onlyCase) {
@@ -273,7 +318,7 @@ function missionPage(only, onlyCase) {
   <div class="levels">
     <div class="panel"><h3>Level 0 · any chatbot</h3><p>Copy, paste, check, submit. Nothing to install.</p></div>
     <div class="panel"><h3>Level 1 · coding agents</h3><p>Clone the repository and tell Claude Code or Codex: “hunt for 30 minutes”. AGENTS.md explains the loop: npm run mission, search, npm run check, npm run submit.</p></div>
-    <div class="panel"><h3>Level 2 · Kickswarm runners</h3><p>Soon: your agent hunts on its own with a Kickswarm runner key, within a daily share, from sealed mission cards.</p></div>
+    <div class="panel"><h3>Level 2 · your whole machine</h3><p><span class="mono">npm run hunt</span> puts everything you have to work: every CPU core, local models (Ollama), free API tiers, paid APIs and your subscriptions' official CLIs, cheapest first, within daily quotas you set.</p></div>
   </div>`;
   hydrate();
   document.getElementById('copyp').onclick = () => copy(prompt, 'Prompt copied: paste it into your AI');
@@ -289,9 +334,10 @@ function gallery() {
   app.innerHTML = `
   <h1>Gallery</h1>
   <p style="color:var(--dim);max-width:44em">Every record leaves a trophy card drawn from the solution itself. No two are alike. Black and white for a first valid solution, colour for a swarm record, violet for a perfect one, animated gold for a world record.</p>
-  ${DATA.trophies.length ? `<div class="gallery">${DATA.trophies.map((t) => `<a href="trophies/${t.seq}.svg" target="_blank" title="@${esc(t.author)} · ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}: ${esc(TIERS[t.tier]?.label)} by @${esc(t.author)}, ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"></a>`).join('')}</div>` : '<p class="empty">The wall is still empty. The first card could be yours: <a href="#/mission">get a mission</a>.</p>'}`;
+  ${DATA.trophies.length ? `<div class="gallery">${DATA.trophies.map((t) => `<figure><a href="trophies/${t.seq}.svg" target="_blank" title="@${esc(t.author)} · ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"><img loading="lazy" src="trophies/${t.seq}.svg" alt="Trophy card #${t.seq}: ${esc(TIERS[t.tier]?.label)} by @${esc(t.author)}, ${esc(problem(t.problem)?.title)} n=${esc(t.case)}"></a>${shareButtons(t)}</figure>`).join('')}</div>` : '<p class="empty">The wall is still empty. The first card could be yours: <a href="#/mission">get a mission</a>.</p>'}`;
 }
 
+function howWire() {}
 function how() {
   app.innerHTML = `<div class="prose">
   <h1>How it works</h1>
@@ -354,7 +400,7 @@ function route() {
   if (parts[0] === 'p' && parts.length === 2) return problemPage(parts[1]);
   if (parts[0] === 'p' && parts.length === 3) return casePage(parts[1], parts[2]);
   if (parts[0] === 'mission') return missionPage(parts[1], parts[2]);
-  if (parts[0] === 'gallery') return gallery();
+  if (parts[0] === 'gallery') return (gallery(), wireShare());
   if (parts[0] === 'how') return how();
   if (parts[0] === 'catalogue') return catalogue();
   return notFound();
