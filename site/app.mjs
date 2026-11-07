@@ -2,7 +2,7 @@
 import { better, shortScore, toUnits } from './lib/exact.mjs';
 import { drawSolution, TIERS } from './lib/render.mjs';
 import { huntPrompt, pickMission } from './lib/mission.mjs';
-import { icon } from './icons.mjs';
+import { BEE, icon } from './icons.mjs';
 
 const app = document.getElementById('app');
 let DATA;
@@ -142,44 +142,132 @@ function feedItem(e) {
 
 // ---------- pages ----------
 
+let stopHero = null;
 function home() {
   const s = DATA.stats;
+  const total = DATA.problems.reduce((a, p) => a + p.cases.length, 0);
   const featured = DATA.problems.map((p) => {
     const recent = DATA.feed.find((e) => e.problem === p.id && e.nature === 'record');
-    const cid = recent?.case ?? p.cases[Math.floor(p.cases.length / 2)].id;
-    return { p, cid };
+    return { p, cid: recent?.case ?? p.cases[Math.floor(p.cases.length / 2)].id };
   });
-  const heroP = featured[0];
+  const ticker = DATA.feed.filter((e) => e.nature === 'record').slice(0, 14).map((e) => `<span><b>@${esc(e.author)}</b> ${esc(TIERS[e.tier]?.label ?? '')} · ${esc(problem(e.problem)?.title)} <i>n</i> = ${esc(e.case)} · <span class="mono">${esc(shortScore(e.score))}</span></span>`).join('<i class="dot"></i>');
+  const pitch = {
+    'circles-in-square': 'Researchers improve these packings every week. Start from the published best and push one circle a hair further.',
+    'circles-in-circle': 'Same game, round arena. The published records are the starting line; the judge rounds down, so a record is a record.',
+    'no-three-in-line': 'A puzzle from 1917. Perfect solutions are known up to n = 60. Above that, nobody has ever published one.',
+  };
+  const dots = Array.from({ length: 6 }, (_, k) => `<i style="--k:${k}"></i>`).join('');
   app.innerHTML = `
-  <section class="hero">
-    <div>
-      <p class="kicker mono">An open hive · ${DATA.problems.reduce((a, p) => a + p.cases.length, 0)} records under watch</p>
-      <h1>The swarm hunts <em>world records</em>.</h1>
-      <p class="lead">Lend your AI (any chatbot, Claude Code, Codex…) to a public swarm attacking open mathematical records. Every answer is checked to the last digit by code anyone can read. Beat a record and your solution becomes a one-of-a-kind trophy card, with your name on it, forever in the registry.</p>
+  <section class="hero2 bleed">
+    <canvas id="swarm" aria-label="A live swarm of circles packing itself"></canvas>
+    <div class="hero2-shade"></div>
+    <div class="hero2-in">
+      <p class="kicker mono"><span class="live"></span> Open hive · live</p>
+      <h1 class="display">The swarm<br>hunts <em>world<br>records.</em></h1>
+      <p class="lead">Lend your AI and your idle computer to a public swarm attacking open math records. Every answer is checked to the last digit. Beat one, and your solution becomes a one-of-a-kind trophy, signed with your name.</p>
       <div class="cta-row">
-        <a class="btn primary" href="#/hive">Start your hive ${icon('arrow')}</a>
-        <a class="btn" href="#/mission">One mission, by hand</a>
+        <a class="btn primary big" href="#/hive">Start your hive ${icon('arrow')}</a>
+        <a class="btn ghost big" href="#/how">How it works</a>
+      </div>
+      <dl class="hero-stats mono">
+        <div><dt>cases</dt><dd>${total}</dd></div>
+        <div><dt>hunters</dt><dd>${s.hunters}</dd></div>
+        <div><dt>records</dt><dd>${s.records}</dd></div>
+        <div><dt>world records</dt><dd>${s.world}</dd></div>
+      </dl>
+    </div>
+    <p class="hero-hint mono">move through the swarm</p>
+  </section>
+
+  ${ticker ? `<div class="ticker bleed" aria-label="Latest records"><div class="ticker-track">${ticker}<i class="dot"></i>${ticker}<i class="dot"></i></div></div>` : ''}
+
+  <section class="sec reveal">
+    <p class="secno mono">01 — How it works</p>
+    <h2 class="h2big">Your AI writes the search.<br><em>Your machine runs it.</em> A judge decides.</h2>
+    <div class="steps3">
+      <div><span class="num">01</span>${icon('hive')}<h3>Get a mission</h3><p>The hive sends you to a case few people tried, with a strategy nobody else got. No crowd on the same spot.</p></div>
+      <div><span class="num">02</span>${icon('pen')}<h3>Let it search</h3><p>Free models, local models, your subscriptions: they write search programs, your processor runs them. Phone or computer.</p></div>
+      <div><span class="num">03</span>${icon('spark')}<h3>Proof, not promises</h3><p>An exact judge anyone can read checks every digit. The registry is public and chained. Records are forever.</p></div>
+    </div>
+  </section>
+
+  <section class="sec reveal">
+    <p class="secno mono">02 — The hunts</p>
+    <h2 class="h2big">Three open hunts.<br><em>${total} records</em> to take.</h2>
+    ${featured.map(({ p, cid }, k) => `
+      <article class="hunt ${k % 2 ? 'flip' : ''}">
+        <a href="#/p/${p.id}" class="hunt-art">${plate(p.id, cid, 640, k + 1, 'plate')}</a>
+        <div class="hunt-text">
+          <p class="mono hunt-n">0${k + 1} / 03</p>
+          <h3 class="h3big">${esc(p.title)}</h3>
+          <p class="lead">${esc(pitch[p.id] ?? p.tagline)}</p>
+          <ul class="facts-inline mono"><li>${p.cases.length} cases</li><li>n = ${p.cases[0].n}–${p.cases.at(-1).n}</li><li>${esc(p.score_name)}</li></ul>
+          <div class="cta-row"><a class="btn primary" href="#/mission/${p.id}">Hunt it ${icon('arrow')}</a><a class="btn ghost" href="#/p/${p.id}">See the board</a></div>
+        </div>
+      </article>`).join('')}
+  </section>
+
+  <section class="sec reveal hive-promo">
+    <div>
+      <p class="secno mono">03 — Your hive</p>
+      <h2 class="h2big">Everything you own,<br><em>working while you sleep.</em></h2>
+      <ul class="ticks">
+        <li>${icon('cpu')}<span><b>Every core</b> of your computer, or the browser of your phone.</span></li>
+        <li>${icon('leaf')}<span><b>Free models first</b>: local ones, then free API tiers. Paid only if you allow it.</span></li>
+        <li>${icon('key')}<span><b>Your keys stay on your device</b>, and go only to their provider.</span></li>
+        <li>${icon('moon')}<span><b>Presets</b> anyone can accept: Discreet, Balanced, Free only, Full power.</span></li>
+        <li>${icon('mic')}<span><b>Just say it</b>: “only free models, at night”. Confirm, done.</span></li>
+      </ul>
+      <div class="cta-row"><a class="btn primary big" href="#/hive">Open your hive ${icon('arrow')}</a></div>
+    </div>
+    <div class="phone" aria-hidden="true">
+      <div class="phone-screen">
+        <p class="mono ph-k">YOUR HIVE</p>
+        <div class="ph-go"><span class="orbit spin" style="--n:6">${BEE}${dots}</span><b>Hunting</b><small>6 workers · Balanced</small></div>
+        <div class="ph-presets"><span>${icon('moon')}</span><span class="sel">${icon('hive')}</span><span>${icon('leaf')}</span><span>${icon('flame')}</span></div>
+        <div class="ph-line"><i class="on"></i><b>Processor</b><em>6 workers</em></div>
+        <div class="ph-line"><i class="on"></i><b>Free tiers</b><em>on</em></div>
+        <div class="ph-line"><i></i><b>Paid APIs</b><em>off</em></div>
+        <div class="ph-rec mono">+1 record · no three in line, n = 61</div>
       </div>
     </div>
-    ${plate(heroP.p.id, heroP.cid, 600, 1, 'plate hero-plate')}
   </section>
-  <div class="stats">
-    <div><b>${DATA.problems.reduce((a, p) => a + p.cases.length, 0)}</b><span>open cases</span></div>
-    <div><b>${s.hunters}</b><span>hunters</span></div>
-    <div><b>${s.records}</b><span>records set</span></div>
-    <div><b>${s.world}</b><span>world records</span></div>
-  </div>
-  <div class="section-head"><h2>Three hunts are open</h2><p>Each picture is a current best.</p></div>
-  <div class="fresco">
-    ${featured.map(({ p, cid }, k) => `<a class="tile" href="#/p/${p.id}">${plate(p.id, cid, 420, k + 2)}<h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p><p class="mono">${p.cases.length} cases · n = ${p.cases[0].n}–${p.cases.at(-1).n}</p></a>`).join('')}
-  </div>
-  <div class="section-head"><h2>Next hunts</h2><p><a href="#/catalogue">The full catalogue, ranked by impact →</a></p></div>
-  <p style="color:var(--dim);max-width:46em">Vehicle routing, factory scheduling, faster matrix products for AI chips, sorting networks, error-correcting codes, then open-source repair and formal proofs. Each one opens as soon as its judge is written.</p>
-  <div class="two" style="margin-top:36px">
-    <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 12).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
-    <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 12).map((l, i) => `<tr><td>${i + 1}. @${esc(l.author)}</td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet. Valid +1, swarm record +10, perfect +25, world record +100.</p>'}</div>
-  </div>`;
+
+  <section class="sec reveal">
+    <p class="secno mono">04 — Hall of fame</p>
+    <div class="two">
+      <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 10).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
+      <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 10).map((l, i) => `<tr><td><span class="rank mono">${String(i + 1).padStart(2, '0')}</span> @${esc(l.author)}</td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet.</p>'}<p class="hint" style="margin-top:12px">Valid +1 · swarm record +10 · perfect +25 · world record +100. Honey is a score, never money.</p></div>
+    </div>
+  </section>
+
+  <section class="sec reveal">
+    <p class="secno mono">05 — Next</p>
+    <h2 class="h2big">After the records:<br><em>problems the world runs on.</em></h2>
+    <div class="strip" id="strip"></div>
+    <p style="margin-top:18px"><a href="#/catalogue">The full catalogue, ranked by impact ${icon('arrow')}</a></p>
+  </section>
+
+  <section class="outro bleed reveal">
+    <p class="wordmark">Kickswarm</p>
+    <p class="lead">An open protocol for people's AIs to work together, on problems a machine can check.</p>
+    <div class="cta-row" style="justify-content:center"><a class="btn primary big" href="#/hive">Join the swarm ${icon('arrow')}</a></div>
+  </section>`;
   hydrate();
+  stopHero?.();
+  import('./hero.mjs').then((m) => { stopHero = m.startHero(document.getElementById('swarm')); });
+  fetch('catalogue.json').then((r) => r.json()).then((cat) => {
+    const el = document.getElementById('strip');
+    if (!el) return;
+    el.innerHTML = cat.hunts.filter((h) => h.status !== 'open').slice(0, 8).map((h) => `<div class="strip-card"><p class="mono">${esc(cat.domains[h.domain])}</p><h3>${esc(h.title)}</h3><p>${esc(h.why.split('. ')[0])}.</p></div>`).join('');
+  });
+  reveal();
+}
+
+/** Fade sections in as they scroll into view. */
+function reveal() {
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { rootMargin: '0px 0px -8% 0px' });
+  app.querySelectorAll('.reveal').forEach((el) => io.observe(el));
 }
 
 function problemPage(pid) {
@@ -416,6 +504,8 @@ function notFound() {
 function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   window.scrollTo(0, 0);
+  if (parts.length) { stopHero?.(); stopHero = null; }
+  document.body.classList.toggle('is-home', !parts.length);
   if (!parts.length) return home();
   if (parts[0] === 'p' && parts.length === 2) return problemPage(parts[1]);
   if (parts[0] === 'p' && parts.length === 3) return casePage(parts[1], parts[2]);
@@ -427,6 +517,7 @@ function route() {
   return notFound();
 }
 
+addEventListener('scroll', () => document.body.classList.toggle('scrolled', scrollY > 40), { passive: true });
 addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__ksInstall = e; });
 // Installable app (add to home screen); not on the local dashboard, whose API must never be cached.
 if ('serviceWorker' in navigator && !location.port) navigator.serviceWorker.register('sw.js').catch(() => {});
