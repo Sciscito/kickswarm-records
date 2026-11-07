@@ -187,6 +187,7 @@ function home() {
     <p class="hero-hint mono">move through the swarm</p>
   </section>
 
+  <div class="livestrip bleed" data-live="strip" aria-live="polite"></div>
   ${ticker ? `<div class="ticker bleed" aria-label="Latest records"><div class="ticker-track">${ticker}<i class="dot"></i>${ticker}<i class="dot"></i></div></div>` : ''}
 
   <section class="sec reveal">
@@ -346,12 +347,13 @@ function problemPage(pid) {
   <h1>${esc(p.title)}</h1>
   <p class="lead" style="max-width:46em;color:var(--dim)">${esc(p.statement)}</p>
   <div class="cta-row"><button class="btn primary big" id="join">${icon('hive')} Join this hunt</button><button class="btn big" id="invite">${icon('share')} Invite friends</button><button class="btn" id="learn">${icon('telescope')} Learn more</button><a class="btn ghost" href="#/mission/${p.id}">By hand</a><a class="btn" href="${esc(p.world_source.url)}" target="_blank" rel="noopener">Reference table ↗</a></div>
+  <div class="livestrip inline" data-live="strip"></div>
   <div class="legend">${['reference', 'valid', 'swarm', 'perfect', 'world'].filter((t) => t !== 'perfect' || p.id === 'no-three-in-line').filter((t) => t !== 'reference' || p.id !== 'no-three-in-line').map(tierBadge).join('')}${p.id === 'no-three-in-line' ? tierBadge(null) : ''}</div>
   <div class="cases">
     ${p.cases.map((c) => {
       const s = summary(p.id, c.id);
       const world = p.id === 'no-three-in-line' && !c.world;
-      return `<a class="case" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">${p.id === 'protein-folding-2d' ? `${esc(c.id.toUpperCase())} · ${c.n} aa` : `n = ${c.n}`}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : p.id === 'protein-folding-2d' || p.id === 'cap-sets' ? `best ${esc(c.world.score)}${c.proven ? '' : ' · open'}` : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
+      return `<a class="case" data-pc="${p.id}|${c.id}" href="#/p/${p.id}/${c.id}">${art(p.id, c.id, 220)}<div class="row"><span class="n">${p.id === 'protein-folding-2d' ? `${esc(c.id.toUpperCase())} · ${c.n} aa` : `n = ${c.n}`}</span>${tierBadge(s.tier)}</div><div class="row"><span class="s">${s.score ? esc(shortScore(s.score)) : world ? '2n never found' : p.id === 'protein-folding-2d' || p.id === 'cap-sets' ? `best ${esc(c.world.score)}${c.proven ? '' : ' · open'}` : 'empty'}</span><span class="s">${s.attempts ? `${s.attempts} tries` : ''}</span></div></a>`;
     }).join('')}
   </div>`;
   hydrate();
@@ -447,6 +449,7 @@ function casePage(pid, cid) {
     <div>
       <h1>${esc(p.title)}, <em>n</em> = ${c.n}</h1>
       <div class="cta-row" style="margin:0 0 6px">${tierBadge(s.tier)}<button class="btn small" id="learn">${icon('telescope')} What is this?</button></div>
+      <div class="livecase" data-live="case" data-pid="${p.id}" data-cid="${c.id}"></div>
       <dl class="facts">
         <dt>Current best</dt><dd>${s.score ? `${esc(shortScore(s.score))} · ${s.credit ? `${esc(s.credit)} (found by @${esc(s.author)})` : `@${esc(s.author)}`}` : 'none yet'}</dd>
         <dt>World record</dt><dd>${esc(worldLine)}</dd>
@@ -490,14 +493,14 @@ function missionPage(only, onlyCase) {
       <h1>${esc(p.title)}, <em>n</em> = ${c.n}</h1>
       <p style="color:var(--dim)">Picked for you among the cases tried least, so the swarm does not pile up on the same spot. ${s.score ? `Current best: <span class="mono">${esc(shortScore(s.score))}</span> by @${esc(s.author)}.` : 'Nobody has a solution here yet.'}</p>
       <div class="strategy"><b>Your strategy</b><br>${esc(m.strategy)}</div>
-      <ol class="steps">
-        <li>Copy the prompt below and paste it into your AI. It works best with one that can run code: ChatGPT, Claude, Gemini.</li>
-        <li>Let it work. It answers with one JSON object.</li>
-        <li>Paste that JSON below and press Check. If it is valid, press Submit: the robot records it and replies on GitHub within a minute.</li>
+      <ol class="tracker" id="tracker">
+        <li class="on" data-step="1"><span>1</span><b>Send the mission to your AI</b><small>One click: it is copied and your app opens.</small></li>
+        <li data-step="2"><span>2</span><b>Your AI hunts</b><small>It shows a 🐝 KICKSWARM header and its progress. When it gives the JSON, copy it.</small></li>
+        <li data-step="3"><span>3</span><b>Come back here</b><small>The answer is checked by itself. Then one click to send it.</small></li>
       </ol>
-      <p class="hint" style="margin:8px 0 0">Hunt with the AI you already use. Each button copies the mission and opens the app: paste if it is not already there, send, then paste the answer below.</p>
       <div class="chatapps"><button class="btn primary" data-chat="chatgpt">Open in ChatGPT</button><button class="btn primary" data-chat="claude">Open in Claude</button><button class="btn primary" data-chat="gemini">Open in Gemini</button></div>
-      <div class="cta-row"><button class="btn" id="copyp">Copy the prompt</button><a class="btn" href="#/mission${only ? `/${only}` : ''}" id="again">Another mission</a></div>
+      <div class="cta-row"><button class="btn big" id="pasteback">${icon('download')} Paste my AI's answer</button><button class="btn" id="copyp">Copy the prompt</button><a class="btn ghost" href="#/mission${only ? `/${only}` : ''}" id="again">Another mission</a></div>
+      <p class="hint">Easier: <a href="#/hive">your hive</a> does all of this by itself, with free models, and you just watch.</p>
       <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--dim)">Show the prompt</summary><pre class="prompt">${esc(prompt)}</pre></details>
       ${submitBox(p, c, s)}
     </div>
@@ -508,7 +511,27 @@ function missionPage(only, onlyCase) {
     <div class="panel"><h3>Level 2 · your whole machine</h3><p><span class="mono">npm run hunt</span> puts everything you have to work: every CPU core, local models (Ollama), free API tiers, paid APIs and your subscriptions' official CLIs, cheapest first, within daily quotas you set.</p></div>
   </div>`;
   hydrate();
-  document.getElementById('copyp').onclick = () => copy(prompt, 'Prompt copied: paste it into your AI');
+  const step = (k) => app.querySelectorAll('#tracker li').forEach((li) => { const n = Number(li.dataset.step); li.classList.toggle('on', n === k); li.classList.toggle('done', n < k); });
+  // Coming back from the AI: read the copied answer, check it, move to step 3.
+  const tryClipboard = async (manual) => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t && t.includes('"problem"') && t.includes(`${p.id}`)) {
+        document.getElementById('sol').value = t;
+        step(3);
+        document.getElementById('check').click();
+        document.getElementById('sol').scrollIntoView({ block: 'center' });
+        return;
+      }
+      if (manual) toast('No Kickswarm answer in the clipboard yet: copy the JSON your AI gave');
+    } catch {
+      if (manual) toast('Allow the clipboard, or paste the answer in the box below');
+    }
+  };
+  document.getElementById('pasteback').onclick = () => tryClipboard(true);
+  const onBack = () => { if (document.visibilityState === 'visible' && document.body.contains(document.getElementById('tracker'))) tryClipboard(false); };
+  document.addEventListener('visibilitychange', onBack);
+  document.getElementById('copyp').onclick = () => { copy(prompt, 'Prompt copied: paste it into your AI'); step(2); };
   // Copy, then open the chat app (with the prompt prefilled where the app accepts it in the link).
   const apps = {
     chatgpt: (q) => `https://chatgpt.com/?q=${encodeURIComponent(q)}`,
@@ -519,6 +542,7 @@ function missionPage(only, onlyCase) {
     await copy(prompt, 'Mission copied');
     const url = apps[b.dataset.chat](prompt);
     window.open(url.length < 8000 ? url : apps[b.dataset.chat]('').replace(/\?q=$/, ''), '_blank', 'noopener');
+    step(2);
   }));
   document.getElementById('again').onclick = (e) => {
     e.preventDefault();
@@ -869,7 +893,7 @@ function joueurs() {
 function carteJoueur(j, rang) {
   const me = moi() === j.author;
   return `<a class="pcard ${me ? 'me' : ''}" href="#/u/${esc(j.author)}">
-    <span class="phex"><span>${esc(j.author.slice(0, 2).toUpperCase())}</span></span>
+    <span class="phex" data-online="${esc(j.author)}"><span>${esc(j.author.slice(0, 2).toUpperCase())}</span></span>
     <span class="pinfo"><b>@${esc(j.author)}${me ? ' <small class="badge t-swarm">you</small>' : ''}</b><small>${j.records} record(s) · ${j.medals} medal(s)${j.world ? ` · ${j.world} world` : ''}${j.perfect ? ` · ${j.perfect} perfect` : ''}</small></span>
     <span class="pval mono">${rang ? `<i>#${rang}</i>` : ''}${j.honey}<small>honey</small></span>
   </a>`;
@@ -890,6 +914,7 @@ function playersPage() {
   app.innerHTML = `
   <p class="kicker mono">Players</p>
   <h1 class="h2big" style="margin-bottom:16px">The hunters.<br><em>You, your friends, the legends.</em></h1>
+  <div class="livestrip inline" data-live="strip"></div>
   <div class="psearch"><input id="q" placeholder="Search a hunter by name…" autocomplete="off" aria-label="Search a hunter"><div id="results" class="plist"></div></div>
 
   <div class="two" style="margin-top:22px">
@@ -1000,11 +1025,45 @@ function joinLanding(pid, by) {
   document.getElementById('learn').onclick = () => learnProblem(p);
 }
 
+// ---------- live: who is hunting what, right now (from the relay, every 10 seconds) ----------
+let LIVE = [];
+const liveAgents = () => LIVE.flatMap((h) => (h.agents ?? []).map((a) => ({ ...a, who: h.name })));
+function liveChip(a) {
+  const p = problem(a.problem);
+  const better = a.score != null && a.startScore != null && a.score !== a.startScore;
+  return `<a class="lchip" href="#/p/${esc(a.problem)}/${esc(a.case)}"><i class="pdot"></i><b>@${esc(a.who)}</b> ${a.phase === 'writing' ? 'writes a searcher for' : 'hunts'} <span>${esc(p?.title ?? a.problem)} · ${esc(a.case)}</span>${a.score != null ? ` <span class="mono ${better ? 'up' : ''}">${esc(shortScore(a.score))}${better ? ' ▲' : ''}</span>` : ''}<small class="kind k-${esc(a.kind)}">${esc(a.model || a.kind)}</small></a>`;
+}
+function paintLive() {
+  const ag = liveAgents();
+  const hunters = LIVE.filter((h) => (h.agents ?? []).length).length;
+  for (const el of document.querySelectorAll('[data-live="strip"]')) {
+    el.innerHTML = ag.length ? `<span class="lhead mono"><i class="pdot"></i> LIVE · ${hunters} hunter(s) · ${ag.length} agent(s)</span>${ag.slice(0, 12).map(liveChip).join('')}` : '<span class="lhead mono"><i class="pdot off"></i> Nobody is hunting right now: <a href="#/hive">be the first</a></span>';
+  }
+  for (const el of document.querySelectorAll('[data-live="case"]')) {
+    const mine = ag.filter((a) => a.problem === el.dataset.pid && a.case === el.dataset.cid);
+    el.innerHTML = mine.length ? `<h3>${icon('hive')} Being hunted right now</h3>${mine.map(liveChip).join('')}` : '';
+  }
+  document.querySelectorAll('.case[data-pc]').forEach((el) => {
+    const [pid, cid] = el.dataset.pc.split('|');
+    const n = ag.filter((a) => a.problem === pid && a.case === cid).length;
+    el.classList.toggle('hunted', n > 0);
+    el.dataset.hunted = n ? `${n} hunting` : '';
+  });
+  document.querySelectorAll('[data-online]').forEach((el) => el.classList.toggle('online', LIVE.some((h) => h.name === el.dataset.online && (h.agents ?? []).length)));
+}
+async function pollLive() {
+  if (!DATA.config.relay) return;
+  const { readPresence } = await import('./lib/presence.mjs');
+  LIVE = await readPresence(DATA.config.relay);
+  paintLive();
+}
+
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
 
 function route() {
+  setTimeout(paintLive, 50);
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   window.scrollTo(0, 0);
   if (parts.length) { stopHero?.(); stopHero = null; }
@@ -1037,6 +1096,8 @@ try {
   document.getElementById('head').textContent = DATA.stats.head ? `registry head ${DATA.stats.head.slice(0, 16)} · ${DATA.stats.entries} entries` : '';
   addEventListener('hashchange', route);
   route();
+  pollLive();
+  setInterval(() => { if (document.visibilityState === 'visible') pollLive(); }, 10000);
 } catch (e) {
   app.innerHTML = `<p>Could not load the hive data (${esc(e.message)}).</p>`;
 }

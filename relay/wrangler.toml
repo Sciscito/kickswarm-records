@@ -6,3 +6,9 @@ compatibility_date = "2026-10-01"
 kv_namespaces = [
   { binding = "QUEUE", id = "7f0a61b3185e45b9973fa7dfdcc31d60" }
 ]
+
+# Live presence: who is hunting what, right now (free D1 database).
+[[d1_databases]]
+binding = "PRESENCE"
+database_name = "kickswarm-presence"
+database_id = "04d277a0-94de-4fe1-b179-c0febf8918da"

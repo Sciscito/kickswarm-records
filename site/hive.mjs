@@ -11,7 +11,8 @@ import { fromPreset, inWindow, PRESETS, ruleCommand } from './lib/presets.mjs';
 import { extractSearcher, searcherPrompt } from './lib/searchgen.mjs';
 import { agentSetupPrompt } from './lib/agentprompt.mjs';
 import { BEE, icon } from './icons.mjs';
-import { createIdentity, identitySummary } from './identity.mjs';
+import { createIdentity, getIdentity, identitySummary } from './identity.mjs';
+import { sendPresence } from './lib/presence.mjs';
 
 const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
 
@@ -225,6 +226,10 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
   async function run() {
     running = true;
     stopping = false;
+    // Live presence: tell the swarm what this hive's agents are doing, every 30 seconds.
+    const beat = () => running && sendPresence(DATA.config.relay, getIdentity(), [...active.values()], 'browser');
+    const beater = setInterval(beat, 30000);
+    setTimeout(beat, 3000);
     try { wake = await navigator.wakeLock?.request('screen'); } catch {}
     emit('state', snapshot());
     try {
@@ -236,9 +241,11 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
         emit('stats', snapshot());
       }
     } finally {
+      clearInterval(beater);
       running = false;
       stopping = false;
       active.clear();
+      sendPresence(DATA.config.relay, getIdentity(), [], 'browser');
       try { await wake?.release(); } catch {}
       save();
       emit('state', snapshot());
@@ -397,6 +404,20 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const p = ps[0];
       return `<div class="epic"><span class="mono">YOUR EPIC</span><b>${esc(p.title)}</b><small>${p.cases.length} cases · ${esc(p.level ?? '')}</small><a class="btn small" href="#/p/${p.id}">See the board</a><button class="btn small" id="epic-invite">${icon('share')} Invite friends</button><button class="btn small ghost" id="epic-all">Hunt everything</button></div>`;
     })()}
+    ${(() => {
+      const hasHunt = (s.problems ?? []).length > 0;
+      const hasName = !!st.identity;
+      const hasAI = inv.sources.length > 0;
+      const steps = [
+        [hasHunt, 'Pick your hunt', 'Join one from the <a href="#/catalogue">hunts</a> (or keep “everything”).', '#/catalogue'],
+        [hasName, 'Pick your hunter name', 'It signs your records and shows you live to the swarm (below, in Rules).', null],
+        [hasAI, 'Add free AI power', 'One click: “Connect with OpenRouter” below. Without it, your processor hunts alone.', null],
+        [h.running, 'Press Start', 'Then watch your agents work, live, right here.', null],
+      ];
+      const next = steps.find((x) => !x[0]);
+      if (!next) return '';
+      return `<div class="todo"><span class="mono">WHAT TO DO NOW</span><ol>${steps.map(([ok, t, d]) => `<li class="${ok ? 'ok' : next[1] === t ? 'now' : ''}"><b>${ok ? '✓ ' : ''}${t}</b><small>${d}</small></li>`).join('')}</ol></div>`;
+    })()}
     <div class="voice">
       <button class="btn icon-btn" id="mic" title="Speak" aria-label="Speak a command">${icon('mic')}</button>
       <input id="cmd" placeholder='Tell your hive what to do: "only free models, at night", "full power for 2 hours"…' aria-label="Command">
@@ -462,7 +483,9 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       const recent = DATA.feed.filter((e) => e.ts >= day);
       const hunters = new Set(recent.map((e) => e.author)).size;
       return `<section class="panel swarmnow" style="margin-top:24px">
-        <h3>The swarm right now <small class="hint">last 24 hours, everyone</small></h3>
+        <h3>The swarm right now</h3>
+        <div class="livestrip inline" data-live="strip"></div>
+        <p class="hint" style="margin-top:12px">Last 24 hours, everyone:</p>
         <div class="cbar" style="grid-template-columns:repeat(3,1fr)"><div class="cstat"><b>${hunters}</b><small>hunters active</small></div><div class="cstat"><b>${recent.filter((e) => e.nature === 'record').length}</b><small>records</small></div><div class="cstat"><b>${recent.length}</b><small>verified tries</small></div></div>
         ${recent.length ? `<ul class="feed">${recent.slice(0, 6).map((e) => `<li>${e.nature === 'record' ? `<span class="badge t-${esc(e.tier)}">${esc(e.tier)}</span>` : '<span class="badge t-attempt">try</span>'} <a href="#/u/${esc(e.author)}">@${esc(e.author)}</a> · ${esc(DATA.problems.find((x) => x.id === e.problem)?.title ?? e.problem)} · ${esc(shortScore(e.score))}${e.model ? ` <small class="kind">${esc(shortModel(e.model))}</small>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Quiet for now. Start your hive and be the first today.</p>'}
       </section>`;
