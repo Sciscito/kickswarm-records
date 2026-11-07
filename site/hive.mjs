@@ -13,6 +13,7 @@ import { agentSetupPrompt } from './lib/agentprompt.mjs';
 import { BEE, icon } from './icons.mjs';
 import { createIdentity, getIdentity, identitySummary } from './identity.mjs';
 import { sendPresence } from './lib/presence.mjs';
+import { signSubmission } from './lib/keys.mjs';
 import { fit, needFor, weightOf } from './lib/delegate.mjs';
 import { huntMode, nextHunt, shares } from './lib/focus.mjs';
 import { readPresence } from './lib/presence.mjs';
@@ -231,8 +232,18 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     const model = prog.source.startsWith('cpu') ? 'browser (built-in searcher)' : prog.source.replace(/^[a-z]+:/, '');
     const sub = { problem: p.id, case: m.cas.id, ...sol, strategy: m.strategyIndex, method: `Browser hive: ${prog.source === 'cpu:builtin' ? 'built-in searcher' : `searcher written by ${prog.source}`}, ${seconds}s from the current best.`, model };
     const imp = { t: new Date().toISOString(), problem: p.id, title: p.title, case: m.cas.id, score: s, previous: fresh?.score ?? null, source: prog.source, status: 'ready to submit', sub };
+    // Shared with the swarm at once (public, signed with your name), so everyone starts from it.
+    if (settings.share !== false && getIdentity() && DATA.config.relay) {
+      try {
+        const signed = await signSubmission(sub, getIdentity());
+        const r = await fetch(`${DATA.config.relay.replace(/\/$/, '')}/submit`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(signed), signal: AbortSignal.timeout(30000) });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok) { imp.status = 'shared with the swarm ✓ (in the registry within ~10 min)'; imp.sub = null; }
+        else imp.status = `not shared yet: ${j.error ?? r.status}`;
+      } catch (e) { imp.status = `not shared yet: ${e.message}`; }
+    }
     improvements.push(imp);
-    result('record', { score: s, best: fresh?.score ?? null, solution: sol, claim: improvements.length - 1 });
+    result('record', { score: s, best: fresh?.score ?? null, solution: sol, claim: imp.sub ? improvements.length - 1 : null });
     emit('improve', imp);
     log(`🐝 improves ${p.title} n=${m.cas.n}: ${shortScore(s)} > ${fresh ? shortScore(fresh.score) : 'none'}`, i);
   }
@@ -578,7 +589,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         ${['local', 'free', 'paid', 'sub'].map((t) => `<label class="row">${TIER_LABEL[t]}: calls per day <input type="number" min="0" max="100000" value="${s.quotas?.[t] ?? 0}" data-quota="${t}"></label>`).join('')}
         <div class="row"><label class="switch"><input type="checkbox" id="sched" ${s.schedule?.enabled ? 'checked' : ''}><span></span></label> Only between <input type="time" id="from" value="${esc(s.schedule?.from ?? '23:00')}"> and <input type="time" id="to" value="${esc(s.schedule?.to ?? '07:00')}"></div>
         ${local ? `<div class="row">${st.schedule?.installed ? 'Runs every night on this computer, even with this page closed. <button class="btn small" id="unsched">Remove</button>' : '<button class="btn small" id="install">Run every night on this computer</button><small class="hint">Creates a scheduled task (Windows Task Scheduler or cron) at the start time above. You can remove it here.</small>'}</div>` : ''}
-        ${local ? `<div class="row"><label class="switch"><input type="checkbox" id="autosub" ${s.submit !== 'none' ? 'checked' : ''}><span></span></label> Publish improvements automatically on GitHub (with your GitHub CLI login). Off: they wait in hunts/outbox.</div>` : '<div class="row hint">In the browser, each improvement waits for your click on Submit.</div>'}
+        ${local ? `<div class="row"><label class="switch"><input type="checkbox" id="autosub" ${s.submit !== 'none' ? 'checked' : ''}><span></span></label> Publish improvements automatically on GitHub (with your GitHub CLI login). Off: they wait in hunts/outbox.</div>` : `<div class="row"><label class="switch"><input type="checkbox" id="share" ${s.share !== false ? 'checked' : ''}><span></span></label> Share my records with the swarm at once (public, under my hunter name). Off: each one waits for my click on Submit.</div>`}
         ${(() => {
           const mode = huntMode(s);
           const sh = shares(s, DATA.problems);
@@ -634,6 +645,12 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     const $ = (q) => app.querySelector(q);
     $('#go').onclick = async () => {
       if (st.hive.running) return apply(() => be.stop(false));
+      if (!st.identity && !getIdentity()) {
+        const name = (prompt('Your hunter name (2 to 24 letters, digits, - or _). Everyone hunting with you sees it live, and your records carry it. No account needed.') ?? '').trim();
+        if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,23}$/.test(name)) return toast('A hunter name is needed so the swarm can see you: try again.');
+        if (DATA.feed.some((e) => String(e.author).toLowerCase() === name.toLowerCase())) return toast(`@${name} is already taken: pick another name.`);
+        try { st = await be.identity(name); } catch (e) { return toast(e.message); }
+      }
       if (local && st.settings.submit !== 'none' && !store.get('ks-consent-submit', false)) {
         const ok = confirm('When your hive beats a record, it will publish the solution on GitHub under your account (public, permanent, credited to you). OK? Cancel = keep improvements on this computer only.');
         store.set('ks-consent-submit', true);
@@ -700,6 +717,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     app.querySelectorAll('[data-submit]').forEach((b) => (b.onclick = () => submitUrl(st.hive.improvements[Number(b.dataset.submit)].sub)));
     $('#installapp')?.addEventListener('click', async () => { await window.__ksInstall.prompt(); window.__ksInstall = null; render(); });
     $('#invite2').onclick = () => invite();
+    $('#share')?.addEventListener('change', (e) => patch({ share: e.target.checked }));
     $('#apimode-on')?.addEventListener('click', () => {
       const checks = [0, 1, 2].filter((k) => app.querySelector(`[data-risk="${k}"]`)?.checked).length;
       apply(() => be.apiMode({ on: true, checks, phrase: $('#apimode-phrase').value }));
