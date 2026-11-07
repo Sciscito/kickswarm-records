@@ -50,7 +50,7 @@ function localBackend(token) {
     connectClaude: () => api('connect/claude-desktop', {}),
     events(on) {
       const es = new EventSource(`/api/events?t=${token}`);
-      for (const ev of ['log', 'state', 'improve', 'stats']) es.addEventListener(ev, (e) => on(ev, JSON.parse(e.data)));
+      for (const ev of ['log', 'state', 'improve', 'stats', 'result']) es.addEventListener(ev, (e) => on(ev, JSON.parse(e.data)));
       return () => es.close();
     },
   };
@@ -207,21 +207,24 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     active.delete(i);
     runs++;
     store.set('ks-hive-runs', runs);
-    if (!sol) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`no improvement found${err ? `: ${err.slice(0, 120)}` : ''}`, i); }
+    // What this search brought, for the notifications and the impact panel.
+    const result = (outcome, extra = {}) => emit('result', { t: Date.now(), problem: p.id, title: p.title, case: m.cas.id, n: m.cas.n, outcome, best: cur?.score ?? null, world: m.cas.world?.score ?? null, direction: p.direction, source: prog.source, seconds, ...extra });
+    if (!sol) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); result('none'); return log(`no improvement found${err ? `: ${err.slice(0, 120)}` : ''}`, i); }
     const { judge } = await import(`./problems/${p.id}/judge.mjs`);
     let s;
-    try { ({ score: s } = judge(m.cas, sol)); } catch (e) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); return log(`rejected by the judge: ${e.message}`, i); }
+    try { ({ score: s } = judge(m.cas, sol)); } catch (e) { if (prog.source !== 'cpu:builtin') note(prog.source, 'fail'); result('rejected'); return log(`rejected by the judge: ${e.message}`, i); }
     if (prog.source !== 'cpu:builtin') note(prog.source, 'valid');
     if (prog.entry) prog.entry.valid++;
     const fresh = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => cur);
     const min = p.score_name === 'radius' ? '0.000000000001' : '1';
-    if (fresh && !(better(s, fresh.score, p.direction) && toUnits(s) - toUnits(fresh.score) >= toUnits(min))) return log(`valid, ${shortScore(s)}: does not beat ${shortScore(fresh.score)}`, i);
+    if (fresh && !(better(s, fresh.score, p.direction) && toUnits(s) - toUnits(fresh.score) >= toUnits(min))) { result('valid', { score: s, best: fresh.score, solution: sol }); return log(`valid, ${shortScore(s)}: does not beat ${shortScore(fresh.score)}`, i); }
     if (prog.source !== 'cpu:builtin') note(prog.source, 'improved');
     if (prog.entry) { prog.entry.wins++; if (!library.includes(prog.entry)) library.push(prog.entry); }
     const model = prog.source.startsWith('cpu') ? 'browser (built-in searcher)' : prog.source.replace(/^[a-z]+:/, '');
     const sub = { problem: p.id, case: m.cas.id, ...sol, strategy: m.strategyIndex, method: `Browser hive: ${prog.source === 'cpu:builtin' ? 'built-in searcher' : `searcher written by ${prog.source}`}, ${seconds}s from the current best.`, model };
     const imp = { t: new Date().toISOString(), problem: p.id, title: p.title, case: m.cas.id, score: s, previous: fresh?.score ?? null, source: prog.source, status: 'ready to submit', sub };
     improvements.push(imp);
+    result('record', { score: s, best: fresh?.score ?? null, solution: sol, claim: improvements.length - 1 });
     emit('improve', imp);
     log(`🐝 improves ${p.title} n=${m.cas.n}: ${shortScore(s)} > ${fresh ? shortScore(fresh.score) : 'none'}`, i);
   }
@@ -352,17 +355,26 @@ function agentCard(a) {
 // The page.
 // One browser hive for the whole app: it keeps running (and keeps its state) when you open other pages,
 // and every page can follow it through the "ks-hive" window event.
-let BROWSER_BE = null;
+let BROWSER_BE = null, LOCAL_BE = null;
+function adopt(be) {
+  window.__ksHive = be;
+  be.events((ev, d) => {
+    if (ev === 'result') dispatchEvent(new CustomEvent('ks-hive-result', { detail: d }));
+    if (ev === 'state') dispatchEvent(new CustomEvent('ks-hive', { detail: d }));
+    if (ev === 'improve') dispatchEvent(new CustomEvent('ks-hive-record', { detail: d }));
+  });
+  return be;
+}
 export function hiveEngine(DATA) {
-  if (!BROWSER_BE) {
-    BROWSER_BE = browserBackend(DATA);
-    window.__ksHive = BROWSER_BE;
-    BROWSER_BE.events((ev, d) => {
-      if (ev === 'state') dispatchEvent(new CustomEvent('ks-hive', { detail: d }));
-      if (ev === 'improve') dispatchEvent(new CustomEvent('ks-hive-record', { detail: d }));
-    });
-  }
-  return BROWSER_BE;
+  return (BROWSER_BE ??= adopt(browserBackend(DATA)));
+}
+/** The hive of this computer (`npm run hive`), followed by every page like the browser one. */
+export function localEngine(token) {
+  return (LOCAL_BE ??= adopt(localBackend(token)));
+}
+export async function bootLocal(token) {
+  const st = await localEngine(token).state();
+  dispatchEvent(new CustomEvent('ks-hive', { detail: st.hive }));
 }
 /** At app start: wake the hive if you left it hunting last time (Stop turns this off). */
 export async function bootHive(DATA) {
@@ -378,7 +390,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   let local = false;
   try { local = !!token && (await fetch('/api/hello', { signal: AbortSignal.timeout(1500) }).then((r) => r.json())).local; } catch {}
   if (token) sessionStorage.setItem('ks-hive-token', token);
-  const be = local ? localBackend(token) : hiveEngine(DATA);
+  const be = local ? localEngine(token) : hiveEngine(DATA);
   if (new URLSearchParams(location.search).get('code')) {
     try {
       const { finishOpenRouterLogin } = await import('./openrouter.mjs');
@@ -404,8 +416,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     const top = Object.entries(count).sort((x, y) => y[1] - x[1])[0]?.[0];
     if (top) return top;
     if ((s.problems ?? []).length === 1) return s.problems[0];
-    if (h.running && h.improvements?.[0]?.problem) return h.improvements[0].problem;
-    return null;
+    return h.improvements?.[0]?.problem ?? s.problems?.[0] ?? DATA.problems.find((p) => p.flagship)?.id ?? DATA.problems[0]?.id ?? null;
   };
   const syncWar = async () => {
     const slot = app.querySelector('#warslot');
@@ -417,7 +428,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       slot.innerHTML = '';
       if (pid) {
         const { warRoom } = await import('./war.mjs');
-        war = warRoom(slot, { DATA, pid, mode: 'hive' });
+        war = warRoom(slot, { DATA, pid, mode: 'hive', me: st.identity?.name });
         const head = slot.querySelector('.warhead');
         head?.insertAdjacentHTML('beforeend', '<div class="waract"><button class="btn primary" id="war-go"></button><button class="btn" id="war-inv">Invite a friend</button></div>');
         slot.querySelector('#war-go').onclick = () => app.querySelector('#go')?.click();

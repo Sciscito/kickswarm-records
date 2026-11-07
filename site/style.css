@@ -777,3 +777,38 @@ canvas.planet { display: block; width: 100%; max-width: min(100%, 72vh); aspect-
 .agent { grid-template-rows: auto auto 1.4em auto auto; min-height: 170px; align-content: start; }
 .ascore, .arem, .atask { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arem { min-height: 1.3em; }
+
+/* ===== Loot: notifications and the record screen ===== */
+.lootstack { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: grid; gap: 8px; width: min(340px, calc(100vw - 32px)); pointer-events: none; }
+@media (max-width: 760px) { .lootstack { bottom: 84px; } }
+.lootpop { pointer-events: auto; cursor: pointer; display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: #0d1030; color: #e8ecff; border: 2px solid #2d3566; box-shadow: 4px 4px 0 #000; font-size: 13px; animation: lootin .35s cubic-bezier(.2, 1.6, .4, 1); }
+.lootpop > div, .lootpop > span { display: grid; gap: 2px; }
+.lootpop span { color: #cfd6ff; }
+.lootpop small { color: #8890c0; font-size: 11px; }
+.lootpop .lk { font: 700 12px 'Silkscreen', monospace; letter-spacing: .06em; }
+.lootpop.ok { border-color: #3d9a5a; } .lootpop.ok .lk { color: #6dff8c; }
+.lootpop.gold { border-color: #c9952b; background: linear-gradient(180deg, #2a1f08, #0d1030); } .lootpop.gold .lk { color: #ffd34d; }
+.lootpop.quiet { opacity: .85; } .lootpop.quiet .lk { color: #8fb6ff; }
+.lootpop .lart { width: 54px; height: 54px; flex: none; background: #fff; border-radius: 6px; overflow: hidden; }
+.lootpop .lart svg { width: 100%; height: 100%; display: block; }
+.lootpop.out { opacity: 0; transform: translateX(30px); transition: .35s; }
+@keyframes lootin { from { transform: translateY(20px) scale(.9); opacity: 0; } }
+.lootwrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: radial-gradient(circle at 50% 40%, rgba(255, 200, 60, .25), rgba(0, 0, 0, .8) 60%); animation: fade .25s; }
+.lootbox { width: min(440px, 100%); text-align: center; padding: 22px 20px; background: #0d1030; color: #e8ecff; border: 3px solid #ffc531; box-shadow: 6px 6px 0 #000, 0 0 80px rgba(255, 197, 49, .45); animation: lootin .5s cubic-bezier(.2, 1.6, .4, 1); }
+.lootkick { font: 700 13px 'Silkscreen', monospace; letter-spacing: .2em; color: #8fb6ff; margin: 0; }
+.loottitle { font: 700 26px/1.1 'Silkscreen', monospace; margin: 6px 0 12px; background: linear-gradient(180deg, #fff3b0, #ffc531 45%, #ff7a1a); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(2px 2px 0 #3a1500); }
+.lootart { width: 220px; height: 220px; margin: 0 auto 10px; background: #fff; border-radius: 10px; overflow: hidden; animation: lootspin 1s cubic-bezier(.2, 1.4, .4, 1); }
+.lootart svg { width: 100%; height: 100%; display: block; }
+@keyframes lootspin { from { transform: rotate(-12deg) scale(.6); opacity: 0; } }
+.lootscore { font: 700 28px 'Silkscreen', monospace; color: #fff; margin: 4px 0; }
+.lootscore small { font-size: 13px; color: #8890c0; }
+.lootgains { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 10px 0; }
+.lootgains span { padding: 5px 10px; border: 2px solid #2d3566; background: #141a45; font: 400 12px 'Silkscreen', monospace; color: #ffd34d; }
+.lootwhy { color: #cfd6ff; font-size: 14px; }
+.wbox.impact { border-color: #3d6a9a; }
+.wbox.impact h4 { color: #6dc8ff; }
+.wprog { display: grid; gap: 4px; margin-top: 8px; }
+.wprog small { color: #9aa3d6; font-size: 11px; }
+.wprog .pxbar { width: 100%; }
+.wwhere { margin: 8px 0 0; font-size: 12px; color: #9aa3d6; line-height: 1.4; }
+.wwhere b { color: #cfd6ff; }

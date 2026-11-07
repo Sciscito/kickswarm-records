@@ -4,6 +4,7 @@ import { drawSolution, TIERS } from './lib/render.mjs';
 import { huntPrompt, pickMission } from './lib/mission.mjs';
 import { BEE, icon } from './icons.mjs';
 import { BADGES, RARITY, medal } from './lib/badges.mjs';
+import { initLoot } from './loot.mjs';
 
 const app = document.getElementById('app');
 let DATA;
@@ -1148,9 +1149,14 @@ try {
   addEventListener('hashchange', route);
   route();
   // Your hive, everywhere: it wakes up with the app if you left it hunting, and a pill shows it on every page.
-  try { if (JSON.parse(localStorage.getItem('ks-hive-settings') ?? 'null')?.autostart) import('./hive.mjs').then((m) => m.bootHive(DATA)).catch(() => {}); } catch {}
+  // On this computer's dashboard (`npm run hive`), follow the local hive; elsewhere, the browser hive.
+  const localToken = (() => { try { return new URLSearchParams(location.search).get('t') ?? sessionStorage.getItem('ks-hive-token'); } catch { return null; } })();
+  if (localToken && /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+    try { sessionStorage.setItem('ks-hive-token', localToken); } catch {}
+    import('./hive.mjs').then((m) => m.bootLocal(localToken)).catch(() => {});
+  } else try { if (JSON.parse(localStorage.getItem('ks-hive-settings') ?? 'null')?.autostart) import('./hive.mjs').then((m) => m.bootHive(DATA)).catch(() => {}); } catch {}
   addEventListener('ks-hive', (e) => paintPill(e.detail));
-  addEventListener('ks-hive-record', (e) => toast(`🐝 Your hive found a record: ${e.detail.title}, ${e.detail.case}`));
+  initLoot({ data: () => DATA, toast });
   // Fresh results without reloading: the robot judges every 10 minutes.
   setInterval(async () => {
     if (document.visibilityState !== 'visible') return;

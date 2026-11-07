@@ -31,7 +31,7 @@ if (process.env.KS_ECHO_AI) inv.sources.push({ key: 'echo:parent', tier: 'local'
 let hive = new Hive({ settings, sources: inv.sources });
 const clients = new Set();
 const send = (type, data) => { for (const c of clients) c.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); };
-const wire = (h) => { for (const ev of ['log', 'state', 'improve', 'stats']) h.on(ev, (d) => send(ev, d)); };
+const wire = (h) => { for (const ev of ['log', 'state', 'improve', 'stats', 'result']) h.on(ev, (d) => send(ev, d)); };
 wire(hive);
 
 const publicInventory = () => ({

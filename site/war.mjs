@@ -5,6 +5,7 @@
 import { better, shortScore } from './lib/exact.mjs';
 import { readPresence } from './lib/presence.mjs';
 import { mountPlanet } from './planet.mjs';
+import { ratio, readImpact } from './loot.mjs';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const store = (k, d) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? d; } catch { return d; } };
@@ -32,10 +33,10 @@ async function presence(relay) {
  * opts: { DATA, pid, focus (case id your AI attacks, mission mode), mode: 'map' | 'hive' | 'mission', onPick(caseId) }
  * Returns { update({ mine, stats }) } to feed the freshest state of your own agents (hive mode).
  */
-export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick }) {
+export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick, me: meOpt }) {
   const p = DATA.problems.find((x) => x.id === pid);
   if (!p) { el.innerHTML = ''; return { update() {} }; }
-  const me = whoAmI(), friends = myFriends();
+  const me = meOpt ?? whoAmI(), friends = myFriends();
   const sum = (cid) => DATA.cases[`${p.id}/${cid}`] ?? {};
   const owners = {};
   const regions = p.cases.map((c) => {
@@ -62,6 +63,7 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick }) {
       <div class="warplanet"><canvas class="planet" aria-label="Pixel planet of ${esc(p.title)}: each territory is a case of the hunt"></canvas><div class="ptip" hidden></div></div>
       <aside class="warside">
         <div class="wbox you"><h4>${mode === 'mission' ? 'Your attack' : 'Your agents here'}</h4><div data-w="mine"></div></div>
+        <div class="wbox impact"><h4>Your impact today</h4><div data-w="impact"></div></div>
         <div class="wbox"><h4>Your friends</h4><div data-w="friends"></div></div>
         <div class="wbox"><h4>The swarm</h4><div data-w="swarm"></div></div>
         <div class="wbox"><h4>Lords of the map</h4>${board.length ? board.slice(0, 6).map((o, k) => `<a class="lordpx" href="#/u/${esc(o.name)}"><i style="background:${hunterColor(o.name, me)}"></i><b>${k + 1}. ${esc(o.name)}</b><span>${o.tiles}${o.crowns ? ' ♛' + o.crowns : ''}</span></a>`).join('') : '<p class="wempty">Nobody holds a territory yet: every one is up for grabs.</p>'}</div>
@@ -126,6 +128,12 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick }) {
     q('friends').innerHTML = friends.length
       ? friends.map((f) => { const n = agents.filter((a) => a.who === f).length; return `<a class="wrow fr" href="#/u/${esc(f)}"><i style="background:${hunterColor(f, me)}"></i><b>${esc(f)}</b><span class="ws ${n ? 'up' : ''}">${n ? `⚔ ${n} bee${n > 1 ? 's' : ''} here` : onlineNames.has(f) ? 'online, other hunt' : 'offline'}</span></a>`; }).join('')
       : '<p class="wempty">Open a hunter’s profile and press <b>Follow</b>: they show up here, live.</p>';
+    const im = readImpact();
+    const bestHere = Object.entries(im.best).filter(([k]) => k.startsWith(`${p.id}/`)).sort((a, b) => b[1] - a[1])[0];
+    const boardBest = p.cases.map((c) => ratio(sum(c.id).score, c.world?.score, p.direction)).filter((x) => x != null);
+    q('impact').innerHTML = `<div class="wstats"><span><b>${im.today.searches}</b> searches</span><span><b>${im.today.valid}</b> valid</span><span><b>${im.today.records}</b> records</span><span><b>${im.today.honey}</b> 🍯</span></div>
+      ${bestHere ? `<div class="wprog"><small>Your best on this hunt: ${esc(bestHere[0].split('/')[1].toUpperCase())} at ${Math.round(bestHere[1] * 100)}% of the world best</small><i class="pxbar"><i style="width:${Math.round(bestHere[1] * 100)}%"></i></i></div>` : boardBest.length ? `<div class="wprog"><small>The swarm on this hunt: ${Math.round((boardBest.reduce((a, b) => a + b, 0) / boardBest.length) * 100)}% of the world bests on average</small><i class="pxbar"><i style="width:${Math.round((boardBest.reduce((a, b) => a + b, 0) / boardBest.length) * 100)}%"></i></i></div>` : ''}
+      <p class="wwhere"><b>Where it goes:</b> a record goes to the public registry and becomes everyone's new starting point (+honey, a card). A valid try or a dead end goes to the shared journal, so nobody repeats it. ${im.today.dead ? `${im.today.dead} dead end${im.today.dead > 1 ? 's' : ''} mapped today.` : ''}</p>`;
     q('swarm').innerHTML = `<div class="wstats"><span><b>${[...hereNames].length}</b> hunters here</span><span><b>${agents.length}</b> agents here</span><span><b>${onlineNames.size}</b> online in all</span></div>`;
   }
   async function poll() {
@@ -140,6 +148,8 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick }) {
   paint();
   poll();
   // Outside the hive page, follow your own hive (if it runs in this app) through its events.
+  const onImpact = () => { if (!el.isConnected) { removeEventListener('ks-impact', onImpact); return; } paint(); };
+  addEventListener('ks-impact', onImpact);
   if (mode !== 'hive') {
     const feed = (h) => { if (!el.isConnected) { removeEventListener('ks-hive', onHive); return; } localMine = h?.running ? h.active ?? [] : null; paint(); };
     const onHive = (e) => feed(e.detail);
