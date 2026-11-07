@@ -486,6 +486,7 @@ function missionPage(only, onlyCase) {
   const prompt = huntPrompt({ ...m, journal: DATA.journal[`${p.id}/${c.id}`] ?? [], site: site() });
   app.innerHTML = `
   <p class="crumbs"><a href="#/">Hunts</a> / Mission</p>
+  <div id="war"></div>
   <div class="casepage">
     <div>${plate(p.id, c.id, 700, 'M', 'plate big')}</div>
     <div>
@@ -499,8 +500,8 @@ function missionPage(only, onlyCase) {
         <li data-step="3"><span>3</span><b>Come back here</b><small>The answer is checked by itself. Then one click to send it.</small></li>
       </ol>
       <div class="chatapps"><button class="btn primary" data-chat="chatgpt">Open in ChatGPT</button><button class="btn primary" data-chat="claude">Open in Claude</button><button class="btn primary" data-chat="gemini">Open in Gemini</button></div>
-      <div class="cta-row"><button class="btn big" id="pasteback">${icon('download')} Paste my AI's answer</button><button class="btn" id="copyp">Copy the prompt</button><a class="btn ghost" href="#/mission${only ? `/${only}` : ''}" id="again">Another mission</a></div>
-      <p class="hint">Easier: <a href="#/hive">your hive</a> does all of this by itself, with free models, and you just watch.</p>
+      <div class="cta-row"><button class="btn big" id="pasteback">${icon('download')} Paste my AI's answer</button><button class="btn" id="copyp">Copy the prompt</button></div>
+      <p class="hint">Easier: <a href="#/hive">your hive</a> does all of this by itself, with free models, and you just watch. Not this case? <a href="#/mission${only ? `/${only}` : ''}" id="again">pick another one</a>.</p>
       <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--dim)">Show the prompt</summary><pre class="prompt">${esc(prompt)}</pre></details>
       ${submitBox(p, c, s)}
     </div>
@@ -511,6 +512,7 @@ function missionPage(only, onlyCase) {
     <div class="panel"><h3>Level 2 · your whole machine</h3><p><span class="mono">npm run hunt</span> puts everything you have to work: every CPU core, local models (Ollama), free API tiers, paid APIs and your subscriptions' official CLIs, cheapest first, within daily quotas you set.</p></div>
   </div>`;
   hydrate();
+  import('./war.mjs').then((w) => w.warRoom(document.getElementById('war'), { DATA, pid: p.id, focus: c.id, mode: 'mission' }));
   const step = (k) => app.querySelectorAll('#tracker li').forEach((li) => { const n = Number(li.dataset.step); li.classList.toggle('on', n === k); li.classList.toggle('done', n < k); });
   // Coming back from the AI: read the copied answer, check it, move to step 3.
   const tryClipboard = async (manual) => {
@@ -1059,158 +1061,24 @@ async function pollLive() {
   paintLive();
 }
 
-// ---------- the territory map of a hunt: a planet of hex territories ----------
-/** A stable, saturated colour per hunter (hue from the name); honey is reserved for "you". */
-function couleurJoueur(name) {
-  if (!name) return null;
-  if (name === moi()) return '#f2b33d';
-  let h = 2166136261;
-  for (const ch of name) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  const hue = (((h >>> 0) % 290) + 75) % 360; // clear of the honey hues (around 40)
-  return `hsl(${hue} 78% 56%)`;
-}
-/** Hex positions in rings around the centre (axial coordinates). */
-function hexSpiral(n) {
-  const out = [[0, 0]];
-  const dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
-  for (let r = 1; out.length < n; r++) {
-    let q = -r, s = r;
-    for (let side = 0; side < 6 && out.length < n; side++) {
-      for (let k = 0; k < r && out.length < n; k++) { out.push([q, s]); q += dirs[side][0]; s += dirs[side][1]; }
-    }
-  }
-  return out;
-}
-let MAP = null; // the map on screen: { pid, total, planet, hive:[x,y] }
+// ---------- the territory map of a hunt: the war room (pixel planet + the fight, live) ----------
 function mapPage(pid) {
   const p = problem(pid);
   if (!p) return notFound();
-  const friends = amis();
-  const me = moi();
-  const owners = {};
-  const cells = p.cases.map((c) => {
-    const s = summary(p.id, c.id);
-    const wild = !s.score || s.tier === 'reference';
-    if (!wild) {
-      const o = (owners[s.author] ??= { name: s.author, tiles: 0, crowns: 0, stars: 0 });
-      o.tiles++;
-      if (s.tier === 'world') o.crowns++;
-      if (s.tier === 'perfect') o.stars++;
-    }
-    return { c, s, wild };
-  });
-  const R = 34;
-  const pts = hexSpiral(cells.length).map(([q, r]) => [R * Math.sqrt(3) * (q + r / 2), R * 1.5 * r]);
-  { const mx = pts.reduce((t, q) => t + q[0], 0) / pts.length, my = pts.reduce((t, q) => t + q[1], 0) / pts.length; for (const q of pts) { q[0] -= mx; q[1] -= my; } }
-  const P = Math.max(...pts.map(([x, y]) => Math.hypot(x, y))) + R * 1.35; // planet radius
-  const M = R * 2.2;
-  const half = P + M;
-  const hex = (cx, cy, r) => Array.from({ length: 6 }, (_, k) => { const a = (Math.PI / 180) * (60 * k - 30); return `${(cx + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`; }).join(' ');
-  // A fixed starfield (seeded, so it does not jump at each visit).
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const stars = Array.from({ length: 90 }, () => { const x = (rnd() * 2 - 1) * half, y = (rnd() * 2 - 1) * half; return Math.hypot(x, y) < P + 8 ? '' : `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(rnd() * 1.3 + 0.4).toFixed(2)}" opacity="${(rnd() * 0.6 + 0.3).toFixed(2)}"/>`; }).join('');
-  const tiles = cells.map(({ c, s, wild }, i) => {
-    const [cx, cy] = pts[i];
-    const col = wild ? null : couleurJoueur(s.author);
-    const friend = !wild && friends.includes(s.author);
-    const mine = !wild && s.author === me;
-    const label = c.id.toUpperCase();
-    return `<a href="#/p/${p.id}/${c.id}" class="tile-hex" data-pc="${p.id}|${c.id}" data-cx="${cx.toFixed(1)}" data-cy="${cy.toFixed(1)}">
-      <polygon points="${hex(cx, cy, R - 1.5)}" class="hexbg ${wild ? 'wild' : 'owned'} ${mine ? 'mine' : ''} ${friend ? 'friend' : ''}" style="${col ? `fill:${col};` : ''}"><title>${esc(p.title)} ${esc(label)}: ${wild ? 'wild territory, nobody holds it yet' : `held by @${s.author} (${shortScore(s.score)})`}</title></polygon>
-      ${s.tier === 'world' ? `<text x="${cx}" y="${cy - 9}" class="crown">♛</text>` : s.tier === 'perfect' ? `<text x="${cx}" y="${cy - 9}" class="crown">★</text>` : ''}
-      <text x="${cx}" y="${cy + 5}" class="hexlabel ${wild ? 'wild' : ''}">${esc(label)}</text>
-    </a>`;
-  }).join('');
-  const board = Object.values(owners).sort((a, b) => b.tiles - a.tiles);
-  const total = cells.length;
-  const claimed = total - cells.filter((x) => x.wild).length;
-  const crowns = board.reduce((n, o) => n + o.crowns + o.stars, 0);
-  const hive = [-P * 0.86, P * 0.86]; // where "your hive" sits, off the planet's lower-left limb
-  MAP = { pid: p.id, total, claimed, crowns, P, hive, friends, me, owners };
-  app.innerHTML = `
-  <p class="crumbs"><a href="#/catalogue">Hunts</a> / <a href="#/p/${p.id}">${esc(p.title)}</a> / Map</p>
-  <div class="maphead"><div><p class="kicker mono">${levelTag(p.level)} Territory map</p><h1 class="h3big" style="margin:4px 0">${esc(p.title)}</h1><p class="hint">Each hex is one case of the hunt. Hold its record and it takes your colour.</p></div>
-    <div class="cta-row"><button class="btn primary" id="joinm">${icon('hive')} Join this hunt</button><button class="btn" id="invitem">${icon('share')} Invite a friend</button></div></div>
-  <div class="maphud" id="maphud"></div>
-  <div class="mapwrap">
-    <div class="mapmain">
-      <svg class="hexmap" viewBox="${-half} ${-half} ${2 * half} ${2 * half}" role="img" aria-label="Territory map of ${esc(p.title)}">
-        <defs>
-          <radialGradient id="ocean" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#2f7fe0"/><stop offset=".7" stop-color="#14408f"/><stop offset="1" stop-color="#0a2457"/></radialGradient>
-          <radialGradient id="shade" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></radialGradient>
-          <radialGradient id="glow"><stop offset="0" stop-color="#fff6c9" stop-opacity=".95"/><stop offset=".5" stop-color="#f2b33d" stop-opacity=".45"/><stop offset="1" stop-color="#f2b33d" stop-opacity="0"/></radialGradient>
-          <filter id="atmo" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="9"/></filter>
-          <filter id="soft"><feGaussianBlur stdDeviation="2.2"/></filter>
-          <clipPath id="planetclip"><circle r="${P}"/></clipPath>
-        </defs>
-        <g class="stars" fill="#dfe8ff">${stars}</g>
-        <circle r="${P + 7}" fill="none" stroke="#6fb6ff" stroke-width="14" opacity=".55" filter="url(#atmo)"/>
-        <circle r="${P}" fill="url(#ocean)"/>
-        <g clip-path="url(#planetclip)"><g class="tiles">${tiles}</g><g class="front" id="front"></g></g>
-        <circle r="${P}" fill="url(#shade)" pointer-events="none"/>
-        <circle r="${P}" fill="none" stroke="#9fd2ff" stroke-opacity=".5" stroke-width="1.5" pointer-events="none"/>
-        <g class="beams" id="beams"></g>
-        <g class="bees" id="bees"></g>
-        <g class="myhive" transform="translate(${hive[0].toFixed(1)} ${hive[1].toFixed(1)})"><polygon points="${hex(0, 0, 18)}" fill="#f2b33d" stroke="#0c0b09" stroke-width="2"/><text y="5" class="hivelabel">YOU</text></g>
-      </svg>
-      <p class="hint maplegend"><span><i class="sw" style="background:#f2b33d"></i> you</span><span><i class="sw" style="background:hsl(95 30% 40%)"></i> wild (free to take)</span><span><i class="sw ring"></i> a friend</span><span>♛ world record · ★ proven perfect</span><span><i class="sw beam"></i> your computing power at work</span></p>
-    </div>
-    <aside class="mapside panel">
-      <h3>Lords of the map</h3>
-      ${board.length ? board.map((o, k) => `<a class="lord ${friends.includes(o.name) ? 'friend' : ''} ${o.name === me ? 'me' : ''}" href="#/u/${esc(o.name)}"><span class="sw" style="background:${couleurJoueur(o.name)}"></span><b>${k + 1}. @${esc(o.name)}</b><span class="mono">${o.tiles} hex${o.crowns ? ` ♛${o.crowns}` : ''}${o.stars ? ` ★${o.stars}` : ''}</span><i class="bar2"><i style="width:${Math.max(2, Math.round((o.tiles / total) * 100))}%;background:${couleurJoueur(o.name)}"></i></i></a>`).join('') : '<p class="empty">No territory claimed yet: every hex is up for grabs.</p>'}
-      <h3 style="margin-top:20px">Your friends</h3>
-      <div id="mapfriends"></div>
-    </aside>
-  </div>`;
+  app.innerHTML = `<p class="crumbs"><a href="#/catalogue">Hunts</a> / <a href="#/p/${p.id}">${esc(p.title)}</a> / Map</p>
+  <div class="cta-row" style="margin-bottom:12px"><button class="btn primary" id="joinm">${icon('hive')} Join this hunt</button><button class="btn" id="invitem">${icon('share')} Invite a friend</button></div>
+  <div id="war"></div>`;
   document.getElementById('joinm').onclick = () => joinHunt(p.id);
   document.getElementById('invitem').onclick = () => inviteToHunt(p.id);
-  paintBees();
+  import('./war.mjs').then((m) => m.warRoom(document.getElementById('war'), { DATA, pid: p.id, mode: 'map' }));
 }
-/** Live layer of the map: bees on attacked hexes, beams from your hive, the HUD and the friends list. */
-function paintBees() {
-  const g = document.getElementById('bees');
-  if (!g || !MAP) return;
-  const { pid, total, claimed, crowns, hive, friends, me, owners } = MAP;
-  const all = liveAgents();
-  const here = all.filter((a) => a.problem === pid);
-  const groups = {};
-  for (const a of here) (groups[a.case] ??= []).push(a);
-  const at = (cid) => { const t = document.querySelector(`.tile-hex[data-pc="${CSS.escape(`${pid}|${cid}`)}"]`); return t ? [Number(t.dataset.cx), Number(t.dataset.cy)] : null; };
-  // Front lines: a glowing ring around every hex under attack.
-  document.getElementById('front').innerHTML = Object.keys(groups).map((cid) => { const xy = at(cid); return xy ? `<circle cx="${xy[0]}" cy="${xy[1]}" r="34" fill="url(#glow)" class="beeglow"/>` : ''; }).join('');
-  // Bees: one dot per agent, in its hunter's colour, circling the hex.
-  g.innerHTML = Object.entries(groups).map(([cid, list]) => {
-    const xy = at(cid);
-    if (!xy) return '';
-    return list.slice(0, 6).map((a, k) => `<g class="orbit" style="transform-origin:${xy[0]}px ${xy[1]}px;animation-delay:${-k * 0.5}s"><circle cx="${(xy[0] + 18).toFixed(1)}" cy="${xy[1]}" r="${a.who === me ? 7 : 5.5}" fill="${couleurJoueur(a.who) ?? '#5fd17a'}" stroke="#0c0b09" stroke-width="1.5"><title>@${esc(a.who)} · ${esc(a.model || a.kind)}${a.score != null ? ` · best ${esc(shortScore(a.score))}` : ''}</title></circle></g>`).join('');
-  }).join('');
-  // Beams: where YOUR computing power goes, from your hive to each hex your agents attack.
-  const mine = here.filter((a) => a.who === me);
-  document.getElementById('beams').innerHTML = [...new Set(mine.map((a) => a.case))].map((cid) => { const xy = at(cid); return xy ? `<line x1="${hive[0]}" y1="${hive[1]}" x2="${xy[0]}" y2="${xy[1]}" class="beam"/>` : ''; }).join('');
-  // HUD.
-  const hunters = new Set(here.map((a) => a.who));
-  const everywhere = LIVE.filter((h) => (h.agents ?? []).length);
-  const myAll = all.filter((a) => a.who === me);
-  const friendsHere = friends.filter((f) => hunters.has(f));
-  const friendsOnline = friends.filter((f) => everywhere.some((h) => h.name === f));
-  const pct = Math.round((claimed / total) * 100);
-  const hud = document.getElementById('maphud');
-  if (hud) hud.innerHTML = `
-    <div class="hudt you"><small>Your power</small><b>${mine.length} <span>agent${mine.length === 1 ? '' : 's'} here</span></b><p>${!me ? '<a href="#/hive">Pick a hunter name</a> to appear on the map' : myAll.length ? `${myAll.length} running in total${myAll.length > mine.length ? `, ${myAll.length - mine.length} on other hunts` : ''}` : '<a href="#/hive">Start your hive</a>: it sends bees here'}</p></div>
-    <div class="hudt"><small>Conquest</small><b>${claimed}<span>/${total} hex</span></b><i class="bar2"><i style="width:${pct}%"></i></i><p>${crowns ? `${crowns} crowned (♛ or ★)` : 'No crown yet'} · ${owners[me]?.tiles ?? 0} yours</p></div>
-    <div class="hudt"><small>Your friends</small><b>${friendsHere.length} <span>here now</span></b><p>${friends.length ? `${friendsOnline.length} of ${friends.length} online` : '<a href="#/players">Follow friends</a> to see them'}</p></div>
-    <div class="hudt"><small>The swarm</small><b>${hunters.size} <span>hunter${hunters.size === 1 ? '' : 's'} here</span></b><p>${here.length} agents on this hunt · ${everywhere.length} hunters online in total</p></div>`;
-  const fl = document.getElementById('mapfriends');
-  if (fl) fl.innerHTML = friends.length ? friends.map((f) => { const n = here.filter((a) => a.who === f).length; const on = everywhere.some((h) => h.name === f); return `<a class="lord friend" href="#/u/${esc(f)}"><span class="sw" style="background:${couleurJoueur(f)}"></span><b>@${esc(f)}</b><span class="mono">${n ? `${n} bee${n === 1 ? '' : 's'} here` : on ? 'online elsewhere' : 'offline'}</span></a>`; }).join('') : '<p class="empty">Open a hunter\'s profile and press Follow: they will show here, with their bees on the map.</p>';
-}
+function paintBees() {}
 
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
 
 function route() {
-  MAP = null;
   setTimeout(paintLive, 50);
   const tab = (location.hash.replace(/^#\/?/, '').split('/')[0]) || 'home';
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('on', a.dataset.tab === (tab === 'p' || tab === 'mission' || tab === 'join' || tab === 'map' ? 'catalogue' : tab === 'u' ? 'players' : tab)));

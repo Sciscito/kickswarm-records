@@ -357,6 +357,46 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   let st;
   try { st = await be.state(); } catch (e) { app.innerHTML = `<h1>Your hive</h1><p class="verdict bad">${esc(e.message)}</p>`; return; }
   const logLines = [];
+  // The page: the war room of the hunt your agents are on (kept between refreshes, so the planet keeps
+  // turning), then the hive itself (redrawn at each change).
+  const body = () => {
+    let b = app.querySelector('#hivebody');
+    if (!b) { app.innerHTML = '<div id="warslot"></div><div id="hivebody"></div>'; b = app.querySelector('#hivebody'); }
+    return b;
+  };
+  let war = null, warPid = null;
+  const huntNow = () => {
+    const h = st.hive, s = st.settings;
+    const count = {};
+    for (const a of h.active ?? []) if (a.problem) count[a.problem] = (count[a.problem] ?? 0) + 1;
+    const top = Object.entries(count).sort((x, y) => y[1] - x[1])[0]?.[0];
+    if (top) return top;
+    if ((s.problems ?? []).length === 1) return s.problems[0];
+    if (h.running && h.improvements?.[0]?.problem) return h.improvements[0].problem;
+    return null;
+  };
+  const syncWar = async () => {
+    const slot = app.querySelector('#warslot');
+    if (!slot) return;
+    const pid = huntNow();
+    if (pid !== warPid) {
+      warPid = pid;
+      war = null;
+      slot.innerHTML = '';
+      if (pid) {
+        const { warRoom } = await import('./war.mjs');
+        war = warRoom(slot, { DATA, pid, mode: 'hive' });
+        const head = slot.querySelector('.warhead');
+        head?.insertAdjacentHTML('beforeend', '<div class="waract"><button class="btn primary" id="war-go"></button><button class="btn" id="war-inv">Invite a friend</button></div>');
+        slot.querySelector('#war-go').onclick = () => app.querySelector('#go')?.click();
+        slot.querySelector('#war-inv').onclick = () => app.querySelector('#invite2')?.click();
+      }
+    }
+    const h = st.hive;
+    const goBtn = slot.querySelector('#war-go');
+    if (goBtn) goBtn.textContent = h.running ? (h.stopping ? 'Stopping…' : '■ Stop the hunt') : '▶ Start hunting';
+    war?.update({ mine: h.active ?? [], stats: { runs: h.runs ?? 0, records: h.improvements?.length ?? 0, active: (h.active ?? []).length } });
+  };
 
   const render = () => {
     const s = st.settings;
@@ -364,7 +404,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     const h = st.hive;
     const srcByTier = (t) => inv.sources.filter((x) => x.tier === t);
     const on = (src) => s.tiers?.[src.tier] !== false && !(s.disabled ?? []).includes(src.key);
-    app.innerHTML = `
+    body().innerHTML = `
     <div class="hive-head">
       <div>
         <p class="crumbs"><a href="#/">Hunts</a> / Your hive</p>
@@ -400,7 +440,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     })()}
     ${(() => {
       const ps = (s.problems ?? []).map((id) => DATA.problems.find((x) => x.id === id)).filter(Boolean);
-      if (ps.length !== 1) return '';
+      if (ps.length !== 1 || h.running) return '';
       const p = ps[0];
       return `<div class="epic"><span class="mono">YOUR EPIC</span><b>${esc(p.title)}</b><small>${p.cases.length} cases · ${esc(p.level ?? '')}</small><a class="btn small" href="#/map/${p.id}">Territory map</a><button class="btn small" id="epic-invite">${icon('share')} Invite friends</button><button class="btn small ghost" id="epic-all">Hunt everything</button></div>`;
     })()}
@@ -415,7 +455,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         [h.running, 'Press Start', 'Then watch your agents work, live, right here.', null],
       ];
       const next = steps.find((x) => !x[0]);
-      if (!next) return '';
+      if (!next || h.running) return '';
       return `<div class="todo"><span class="mono">WHAT TO DO NOW</span><ol>${steps.map(([ok, t, d]) => `<li class="${ok ? 'ok' : next[1] === t ? 'now' : ''}"><b>${ok ? '✓ ' : ''}${t}</b><small>${d}</small></li>`).join('')}</ol></div>`;
     })()}
     <div class="voice">
@@ -496,6 +536,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       <pre class="prompt">${esc(agentSetupPrompt())}</pre>
     </details>`;
     wire();
+    syncWar();
   };
 
   const apply = async (fn) => { try { st = await fn(); render(); } catch (e) { toast(e.message); } };
