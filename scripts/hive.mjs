@@ -30,6 +30,8 @@ let settings = loadSettings(cores);
 let inv = await inventory();
 if (process.env.KS_ECHO_AI) inv.sources.push({ key: 'echo:parent', tier: 'local', kind: 'echo', label: 'Echo (test source)' });
 let hive = new Hive({ settings, sources: inv.sources });
+const SITE_ORIGIN = (() => { try { return new URL(JSON.parse(readFileSync(join(ROOT, 'site', 'config.json'), 'utf8')).site).origin; } catch { return null; } })();
+const PROBLEM_LIST = ['cap-sets', 'circles-in-square', 'circles-in-circle', 'no-three-in-line', 'protein-folding-2d'];
 const clients = new Set();
 const send = (type, data) => { for (const c of clients) c.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); };
 const wire = (h) => { for (const ev of ['log', 'state', 'improve', 'stats', 'result']) h.on(ev, (d) => send(ev, d)); };
@@ -160,7 +162,30 @@ createServer(async (req, res) => {
   const hostOk = [`localhost:${PORT}`, `127.0.0.1:${PORT}`].includes(req.headers.host);
   if (url.pathname.startsWith('/api/')) {
     if (!hostOk) return json(res, 403, { error: 'bad host' });
-    if (url.pathname === '/api/hello') return json(res, 200, { ok: true, local: true });
+    // The public site may ask, from its exact origin only, whether a hive runs here and pass on an
+    // invitation (join a friend's hunt). Nothing else is reachable without the session token.
+    const origin = req.headers.origin;
+    const siteOrigin = SITE_ORIGIN && origin === SITE_ORIGIN;
+    if (siteOrigin && ['/api/hello', '/api/invite'].includes(url.pathname)) {
+      res.setHeader('access-control-allow-origin', origin);
+      res.setHeader('access-control-allow-private-network', 'true');
+      res.setHeader('access-control-allow-headers', 'content-type');
+      res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+      res.setHeader('vary', 'origin');
+      if (req.method === 'OPTIONS') return res.writeHead(204).end();
+    }
+    if (url.pathname === '/api/hello') return json(res, 200, { ok: true, local: true, name: identity?.name ?? null, running: hive.running });
+    if (url.pathname === '/api/invite' && req.method === 'POST' && (siteOrigin || !origin || origin === `http://localhost:${PORT}` || origin === `http://127.0.0.1:${PORT}`)) {
+      const b = await body(req);
+      const pid = String(b.hunt ?? ''), by = String(b.by ?? '');
+      if (!PROBLEM_LIST.includes(pid)) return json(res, 400, { error: 'unknown hunt' });
+      settings = clean({ mode: 'pick', problems: [pid], weights: { [pid]: 100 }, ...(/^[A-Za-z0-9][A-Za-z0-9_-]{1,23}$/.test(by) ? { friends: [...(settings.friends ?? []), by], invitedBy: settings.invitedBy ?? by } : {}), autostart: true }, cores, settings);
+      hive.settings = settings;
+      saveSettings(settings);
+      if (!hive.running) hive.run().catch((e) => hive.log(`error: ${e.message}`));
+      hive.log(`Invitation accepted: hunting ${pid}${by ? ` with ${by}` : ''}.`);
+      return json(res, 200, { ok: true, hunt: pid, running: true });
+    }
     const tok = req.headers['x-hive-token'] ?? url.searchParams.get('t');
     if (tok !== TOKEN) return json(res, 401, { error: 'missing or wrong token: open the link printed in the terminal' });
     try {

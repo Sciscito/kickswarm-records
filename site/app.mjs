@@ -1002,6 +1002,15 @@ function huntersOn(pid) {
   const since = new Date(Date.now() - 7 * 86400000).toISOString();
   return new Set(DATA.feed.filter((e) => e.problem === pid && e.ts >= since).map((e) => e.author)).size;
 }
+/** A ready nickname, so joining is one tap (it can be changed). */
+function suggestName() {
+  const a = ['busy', 'brave', 'swift', 'lucky', 'sunny', 'tiny', 'golden', 'clever', 'happy', 'royal'];
+  const b = ['bee', 'drone', 'comb', 'pollen', 'hive', 'wasp', 'nectar', 'buzz'];
+  let n;
+  do n = `${a[Math.floor(Math.random() * a.length)]}-${b[Math.floor(Math.random() * b.length)]}${Math.floor(Math.random() * 90 + 10)}`;
+  while (joueurs().some((j) => j.author.toLowerCase() === n));
+  return n;
+}
 /** The page a friend lands on: one button. */
 function joinLanding(pid, by) {
   const p = problem(pid);
@@ -1014,9 +1023,10 @@ function joinLanding(pid, by) {
       <h1 class="display" style="font-size:clamp(46px,8vw,104px)">Join the<br><em>${esc(p.title)}</em><br>hunt.</h1>
       <p class="lead dimlead" style="margin-top:0">${esc(p.about?.what ?? p.tagline)}</p>
       <div class="joinbox">
-        ${local.get('ks-identity', null)?.name ? `<p class="hint">You join as <b>@${esc(local.get('ks-identity', null).name)}</b>.</p>` : `<label for="jname">Your nickname <small>so ${by ? `@${esc(by)}` : 'your friends'} can see you hunting</small></label><input id="jname" maxlength="24" autocomplete="nickname" placeholder="e.g. kev" enterkeyhint="go">`}
+        <div id="jpc" hidden class="jpc"></div>
+        ${local.get('ks-identity', null)?.name ? `<p class="hint">You join as <b>@${esc(local.get('ks-identity', null).name)}</b>.</p>` : `<label for="jname">Your nickname <small>so ${by ? `@${esc(by)}` : 'your friends'} can see you hunting (change it if you like)</small></label><input id="jname" maxlength="24" autocomplete="nickname" value="${esc(suggestName())}" enterkeyhint="go">`}
         <button class="btn primary big" id="joinnow">${icon('hive')} Join the hunt</button>
-        <p class="hint" id="jmsg">Nothing to install, no account: it runs right here, in your browser.</p>
+        <p class="hint" id="jmsg">One tap. Nothing to install, no account: it runs right here, in your browser.</p>
       </div>
       <div class="cta-row"><a class="btn ghost" href="#/map/${pid}">See the map</a><button class="btn ghost" id="learn">Learn more</button></div>
       <p class="hint">${huntersOn(pid)} hunter(s) on it this week · free models first</p>
@@ -1025,6 +1035,26 @@ function joinLanding(pid, by) {
   </section>`;
   hydrate();
   const msg = document.getElementById('jmsg');
+  // A Kickswarm hive already runs on this computer? Then the invitation goes to it: one tap, full power.
+  (async () => {
+    try {
+      const r = await fetch('http://127.0.0.1:7878/api/hello', { signal: AbortSignal.timeout(1200) }).then((x) => x.json());
+      if (!r?.local) return;
+      const box = document.getElementById('jpc');
+      box.hidden = false;
+      box.innerHTML = `<b>${icon('laptop')} Your computer's hive is running${r.name ? ` (@${esc(r.name)})` : ''}.</b><button class="btn primary big" id="joinpc">${icon('hive')} Join with my computer</button><small>It switches to this hunt${by ? ` and follows @${esc(by)}` : ''}, and starts if it was stopped.</small>`;
+      document.getElementById('joinpc').onclick = async () => {
+        try {
+          const j = await fetch('http://127.0.0.1:7878/api/invite', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ hunt: pid, by: by ?? '' }) }).then((x) => x.json());
+          if (!j.ok) throw new Error(j.error ?? 'refused');
+          if (by) { local.set('ks-friends', [...new Set([...amis(), by])]); local.set('ks-invited-by', by); }
+          box.innerHTML = `<b>✓ Done: your computer hunts ${esc(p.title)}${by ? ` with @${esc(by)}` : ''}.</b><a class="btn big" href="#/map/${pid}">See the map</a>`;
+        } catch (e) { toast(`Your computer's hive did not answer: ${e.message}. Join in the browser instead.`); }
+      };
+      document.getElementById('joinnow').textContent = 'Join in this browser instead';
+      document.getElementById('joinnow').classList.remove('primary');
+    } catch {}
+  })();
   const go = async () => {
     const input = document.getElementById('jname');
     if (input) {

@@ -837,3 +837,6 @@ canvas.planet { display: block; width: 100%; max-width: min(100%, 72vh); aspect-
 .share input { accent-color: var(--honey); width: 100%; }
 .share output { font: 600 13px var(--mono); color: var(--honey); text-align: right; }
 @media (max-width: 520px) { .share { grid-template-columns: 1fr 100px 40px; } }
+
+.jpc { display: grid; gap: 8px; padding: 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, #5fd17a 50%, var(--line)); background: color-mix(in srgb, #5fd17a 8%, transparent); }
+.jpc small { color: var(--dim); }

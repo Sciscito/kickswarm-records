@@ -27,6 +27,13 @@ export function openInvite({ site, pid, title, by, toast }) {
   const text = `${by ? `${by} invites you` : 'Join me'} on the ${title} hunt on Kickswarm: our AIs team up on real science records. Tap, pick a nickname, you're in. Nothing to install.`;
   const msg = `${text}\n${url}`;
   const touch = matchMedia('(pointer: coarse)').matches;
+  // On a phone: straight to the share sheet (WhatsApp, SMS, Messenger…), nothing in between.
+  if (touch && navigator.share) {
+    navigator.share({ title: `Kickswarm · ${title}`, text, url }).catch((e) => { if (e?.name !== 'AbortError') openSheet(); });
+    return;
+  }
+  openSheet();
+  function openSheet() {
   document.querySelector('.sheet-wrap')?.remove();
   const w = document.createElement('div');
   w.className = 'sheet-wrap';
@@ -67,4 +74,5 @@ export function openInvite({ site, pid, title, by, toast }) {
     const box = w.querySelector('[data-w="qr"]');
     if (box) box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
   }).catch(() => w.querySelector('.invqr')?.remove());
+  }
 }
