@@ -46,6 +46,32 @@ const trophies = reg.filter((e) => e.nature === 'record').reverse()
   .map(({ seq, problem, case: c, author, tier, score, ts }) => ({ seq, problem, case: c, author, tier, score, ts }));
 const leaderboard = Object.entries(honey).sort((a, b) => b[1] - a[1]).map(([author, h]) => ({ author, honey: h, records: trophies.filter((t) => t.author === author).length }));
 
+// What worked, for whom: model and strategy statistics per problem. The hives read them to steer
+// themselves (lib/mission.mjs picks strategies with them; hives prefer models that produce records).
+const modelLabel = (m) => (!m ? 'unknown' : /built-in/i.test(m) ? 'Built-in searcher' : String(m).slice(0, 40));
+const learn = { global: {}, problems: {} };
+for (const p of problems) learn.problems[p.id] = { models: {}, strategies: p.strategies.map((label, i) => ({ i, label, tries: 0, records: 0 })), timeline: {} };
+for (const e of reg) {
+  if (e.nature !== 'record' && e.nature !== 'attempt') continue;
+  const L = learn.problems[e.problem];
+  if (!L) continue;
+  const m = modelLabel(e.model);
+  for (const bucket of [L.models, learn.global]) {
+    const x = (bucket[m] ??= { model: m, attempts: 0, records: 0, honey: 0 });
+    if (e.nature === 'record') { x.records++; x.honey += e.honey ?? 0; } else x.attempts++;
+  }
+  if (typeof e.strategy === 'number' && L.strategies[e.strategy]) {
+    L.strategies[e.strategy].tries++;
+    if (e.nature === 'record') L.strategies[e.strategy].records++;
+  }
+  if (e.nature === 'record') { const d = e.ts.slice(0, 10); L.timeline[d] = (L.timeline[d] ?? 0) + 1; }
+}
+const sortModels = (o) => Object.values(o).sort((a, b) => b.records - a.records || b.attempts - a.attempts);
+const learning = {
+  global: sortModels(learn.global),
+  problems: Object.fromEntries(Object.entries(learn.problems).map(([id, L]) => [id, { models: sortModels(L.models), strategies: L.strategies, timeline: Object.entries(L.timeline).sort().map(([date, n]) => ({ date, n })) }])),
+};
+
 const config = JSON.parse(readFileSync('site/config.json', 'utf8'));
 const data = {
   built: new Date().toISOString(),
@@ -56,6 +82,7 @@ const data = {
   feed,
   trophies,
   leaderboard,
+  learning,
   stats: {
     hunters: people.size,
     records: trophies.length,

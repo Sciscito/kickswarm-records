@@ -482,3 +482,37 @@ body.is-home.scrolled .top { background: color-mix(in srgb, var(--bg) 88%, trans
   .fan a:hover { transform: rotate(calc((var(--i) - 2) * 7deg)) translateX(calc((var(--i) - 2) * 16px)) translateY(-16px); }
   .datapeek { white-space: pre-wrap; word-break: break-all; }
 }
+
+.connect { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.connect h4 { font: 400 20px var(--serif); margin: 0 0 6px; }
+.connect h4 small { font: 12px var(--sans); color: var(--faint); margin-left: 6px; }
+.addrow.hero-row b { display: flex; gap: 8px; align-items: center; }
+.addrow.hero-row b .ic { color: var(--honey); }
+.addrow .ok { color: var(--ok); }
+.addrow .dimmed { color: var(--faint); }
+.chatapps { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+
+/* ===== Stats ===== */
+.statblock { margin-top: 18px; padding: 26px; }
+.statblock h3 { font-weight: 400; font-size: 20px; }
+.statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+@media (max-width: 860px) { .statgrid { grid-template-columns: 1fr; } }
+.hbars { display: grid; gap: 10px; margin-top: 10px; }
+.hbar { display: grid; grid-template-columns: minmax(110px, 1.2fr) 2fr 56px; grid-template-areas: "l t v" "s s s"; gap: 2px 12px; align-items: center; padding: 4px 6px; border-radius: 8px; }
+.hbar:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.hbar .hl { grid-area: l; font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .ht { grid-area: t; height: 10px; background: color-mix(in srgb, var(--ink) 7%, transparent); border-radius: 4px; overflow: hidden; }
+.hbar .ht i { display: block; height: 100%; background: var(--honey); border-radius: 0 4px 4px 0; }
+.hbar .hv { grid-area: v; text-align: right; font-size: 13px; color: var(--ink); }
+.hbar .hs { grid-area: s; font-size: 12px; color: var(--faint); }
+.tl { width: 100%; height: auto; margin-top: 8px; }
+.tl .axis { stroke: var(--line); }
+.tl .line { fill: none; stroke: var(--honey); stroke-width: 2; stroke-linejoin: round; }
+.tl .area { fill: color-mix(in srgb, var(--honey) 12%, transparent); }
+.tl .dot { fill: var(--honey); stroke: var(--bg); stroke-width: 2; pointer-events: none; }
+.tl .hit { fill: transparent; cursor: default; }
+.tl .pt:hover .dot { r: 6; }
+.tl .tlv { fill: var(--ink); font: 400 22px var(--serif); }
+.ladder.loop li { min-height: 0 !important; }
+
+.proof b.txt { font-size: clamp(22px, 2.6vw, 34px); line-height: 1.15; overflow-wrap: anywhere; }

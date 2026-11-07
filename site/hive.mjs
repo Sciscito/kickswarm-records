@@ -129,7 +129,10 @@ function browserBackend(DATA) {
   function pickSource() {
     for (const tier of ['local', 'free', 'paid', 'sub']) {
       const ok = sources.filter((s) => s.tier === tier && allowed(s) && quotaLeft(s) && (stats[s.key]?.streak ?? 0) < 3);
-      if (ok.length) return ok[0];
+      // Prefer models with a track record across the swarm (records per try), then this device's own.
+      const g = (s) => { const x = (DATA.learning?.global ?? []).find((m) => m.model === s.model); return x ? (x.records + 1) / (x.records + x.attempts + 2) : 0.3; };
+      const own = (s) => { const x = stats[s.key]; return x ? (x.improved * 3 + x.valid + 1) / (x.calls + 2) : 0.5; };
+      if (ok.length) return ok.sort((a, b) => g(b) + own(b) - (g(a) + own(a)))[0];
     }
     for (const s of sources) if (stats[s.key]) stats[s.key].streak = 0;
     return null;
@@ -283,6 +286,13 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   try { local = !!token && (await fetch('/api/hello', { signal: AbortSignal.timeout(1500) }).then((r) => r.json())).local; } catch {}
   if (token) sessionStorage.setItem('ks-hive-token', token);
   const be = local ? localBackend(token) : browserBackend(DATA);
+  if (new URLSearchParams(location.search).get('code')) {
+    try {
+      const { finishOpenRouterLogin } = await import('./openrouter.mjs');
+      const key = await finishOpenRouterLogin();
+      if (key) { await be.key('openrouter', key); toast('OpenRouter connected: free models added to your hive'); }
+    } catch (e) { toast(e.message); }
+  }
   let st;
   try { st = await be.state(); } catch (e) { app.innerHTML = `<h1>Your hive</h1><p class="verdict bad">${esc(e.message)}</p>`; return; }
   const logLines = [];
@@ -323,13 +333,21 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         ${['local', 'free', 'paid', 'sub'].map((t) => `
           <div class="tier"><label class="switch"><input type="checkbox" data-tier="${t}" ${s.tiers?.[t] !== false ? 'checked' : ''}><span></span></label><b>${TIER_LABEL[t]}</b><small>${s.quotas?.[t] ?? 0} calls/day per source</small></div>
           ${srcByTier(t).map((x) => `<div class="src ${on(x) ? 'on' : ''}"><label class="switch"><input type="checkbox" data-src="${esc(x.key)}" ${!(s.disabled ?? []).includes(x.key) ? 'checked' : ''}><span></span></label><div><b>${esc(x.label)}</b><small>${h.usage?.[x.key] ?? 0} calls today${x.masked ? ` · key ${esc(x.masked)}` : ''}${h.stats?.[x.key] ? ` · ${h.stats[x.key].improved} record(s) from ${h.stats[x.key].calls} call(s)` : ''}</small></div>${x.masked ? `<button class="btn small" data-forget="${esc(x.key.split(':')[0])}">Forget key</button>` : ''}${x.kind === 'webllm' ? '<button class="btn small" id="webllm-off">Remove</button>' : ''}</div>`).join('')}`).join('')}
-        <details class="add"><summary>Add a source</summary>
-          <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider. ${local ? '' : 'They are never given to the search programs.'}</p>
-          ${!local && !inv.sources.some((x) => x.kind === 'webllm') ? `<div class="addrow"><b>On-device model (free, no key)</b><small>${navigator.gpu ? 'Runs on this device’s graphics chip. Downloads about 1 GB once, then works offline. Best on a computer or a recent phone, on Wi-Fi.' : 'Needs WebGPU (recent Chrome or Edge). Not available in this browser.'}</small>${navigator.gpu ? '<div class="addkey"><button class="btn small" id="webllm-on">Download and use</button></div>' : ''}</div>` : ''}
-          ${Object.entries(st.providers).map(([id, p]) => inv.sources.some((x) => x.key.startsWith(`${id}:`)) ? '' : `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`).join('')}
-          ${local && !inv.sources.some((x) => x.kind === 'ollama') ? '<div class="addrow"><b>A free local model, one click</b><small>Installs Ollama (free, open source) and a coding model, qwen2.5-coder 7B (about 5 GB). Runs on your computer, no key, no account.</small><div class="addkey"><button class="btn small" id="ollama-install">Install it for me</button></div></div>' : ''}
-          ${local ? '<div class="addrow"><b>Your everyday AI as a hunter</b><small>Connects Kickswarm to Claude Desktop: ask it “get me a Kickswarm mission” and it hunts, checks and submits by itself (it asks you before submitting).</small><div class="addkey"><button class="btn small" id="claude-connect">Connect to Claude Desktop</button></div></div>' : ''}
-          ${local ? (inv.missing ?? []).filter((m) => m.key.startsWith('cli:')).map((m) => `<div class="addrow"><b>${esc(m.label)}</b><small>${esc(m.how)}</small></div>`).join('') : '<div class="addrow"><b>Local models and subscriptions</b><small>Ollama, Claude Code, Codex and Gemini CLI work with the hive on a computer (npm run hive).</small></div>'}
+        <div class="connect">
+          <h4>Connect your AI <small>most people already have one of these</small></h4>
+          ${inv.sources.some((x) => x.key.startsWith('openrouter:')) ? '' : `<div class="addrow hero-row"><b>${icon('spark')} OpenRouter, free models</b><small>Dozens of free models (DeepSeek, Qwen, Llama…) behind one login. Log in with Google or GitHub, approve, done: nothing to copy. Free within OpenRouter's daily limits.</small><div class="addkey"><button class="btn primary small" id="or-login">Connect with OpenRouter</button></div></div>`}
+          <div class="addrow hero-row"><b>${icon('hive')} Your subscription: ChatGPT, Claude, Gemini</b>
+            <small>${local
+              ? `Detected here: ${['cli:claude', 'cli:codex', 'cli:gemini'].map((k) => inv.sources.some((x) => x.key === k) ? `<span class="ok">${k.slice(4)} ✓</span>` : `<span class="dimmed">${k.slice(4)}</span>`).join(' · ')}. The hive drives them through their official command-line tools, within your plan's own limits. Missing one? <a href="https://docs.anthropic.com/en/docs/claude-code/overview" target="_blank" rel="noopener">Claude Code</a> (Claude Pro/Max), <a href="https://github.com/openai/codex" target="_blank" rel="noopener">Codex</a> (ChatGPT plans), <a href="https://github.com/google-gemini/gemini-cli" target="_blank" rel="noopener">Gemini CLI</a> (any Google account).`
+              : 'Hunt with the chat app you pay for: the mission page copies the prompt and opens ChatGPT, Claude or Gemini for you. Paste their answer back to check it.'}</small>
+            <div class="addkey">${local ? '<button class="btn small" id="claude-connect">Also connect Claude Desktop</button>' : '<a class="btn small" href="#/mission">Hunt with my chat app</a>'}</div></div>
+          ${inv.sources.some((x) => x.key.startsWith('gemini:')) ? '' : `<div class="addrow"><b>${icon('key')} Google Gemini, free tier</b><small>With your Google account: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a> → “Create API key” → paste it here.</small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your Gemini key" data-keyfor="gemini"><button class="btn small" data-savekey="gemini">Connect</button></div></div>`}
+          <p class="hint">Keys are ${local ? 'saved in .env.local on this computer' : 'kept in this browser only'} and sent only to their provider${local ? '' : '; search programs never see them'}.</p>
+        </div>
+        <details class="add"><summary>Advanced: local models, paid APIs</summary>
+          ${local ? (inv.sources.some((x) => x.kind === 'ollama') ? '<p class="hint">Ollama detected: its best model is in your sources.</p>' : '<div class="addrow"><b>Local models (optional)</b><small>Only if you want to: installs Ollama and qwen2.5-coder 7B (about 5 GB) to run models on this computer.</small><div class="addkey"><button class="btn small" id="ollama-install">Install it for me</button></div></div>') : ''}
+          ${!local && !inv.sources.some((x) => x.kind === 'webllm') ? `<div class="addrow"><b>On-device model (no key, no account)</b><small>${navigator.gpu ? 'Runs on this device’s graphics chip. Downloads about 1 GB once. Best on a computer or a recent phone, on Wi-Fi.' : 'Needs WebGPU (recent Chrome or Edge).'}</small>${navigator.gpu ? '<div class="addkey"><button class="btn small" id="webllm-on">Download and use</button></div>' : ''}</div>` : ''}
+          ${['groq', 'anthropic', 'openai'].filter((id) => !inv.sources.some((x) => x.key.startsWith(`${id}:`))).map((id) => { const p = st.providers[id]; return `<div class="addrow"><b>${esc(p.label)}</b><small>${esc(p.note)} · <a href="${esc(p.keyUrl)}" target="_blank" rel="noopener">get a key ↗</a></small><div class="addkey"><input type="password" autocomplete="off" placeholder="paste your ${esc(p.label)} key" data-keyfor="${id}"><button class="btn small" data-savekey="${id}">Connect</button></div></div>`; }).join('')}
         </details>
         ${local && inv.tools?.length ? `<p class="hint">Tools your agents already have (MCP): ${inv.tools.map((t) => esc(t.name)).join(', ')}. The hive does not use them for searching; the setup prompt below may.</p>` : ''}
       </section>
@@ -380,6 +398,10 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
       }
       apply(() => be.start());
     };
+    $('#or-login')?.addEventListener('click', async () => {
+      const { startOpenRouterLogin } = await import('./openrouter.mjs');
+      startOpenRouterLogin(`${location.origin}${location.pathname}`); // the local session token stays in sessionStorage, never in a third-party URL
+    });
     $('#ollama-install')?.addEventListener('click', async () => {
       if (!confirm('Install Ollama and download the qwen2.5-coder 7B model (about 5 GB) on this computer?')) return;
       try { const r = await be.installOllama(); st = r; render(); toast(r.message); } catch (e) { toast(e.message); }

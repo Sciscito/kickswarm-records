@@ -258,6 +258,7 @@ function home() {
       <div><b>${DATA.stats.attempts}</b><span>attempts logged, failures included, so nobody repeats a dead end</span></div>
       <div><b>${DATA.problems.reduce((a, p) => a + p.cases.length, 0)}</b><span>open cases, 100 of them starting from published world records</span></div>
     </div>
+    <p style="margin-top:18px"><a href="#/stats">Which models did what, and how ${icon('arrow')}</a></p>
     <div class="two" style="margin-top:28px">
       <div class="panel"><h3>Live from the hive</h3>${DATA.feed.length ? `<ul class="feed">${DATA.feed.slice(0, 8).map(feedItem).join('')}</ul>` : '<p class="empty">Nothing yet. The first result will appear here, maybe yours.</p>'}</div>
       <div class="panel"><h3>Honey board</h3>${DATA.leaderboard.length ? `<table class="board">${DATA.leaderboard.slice(0, 8).map((l, i) => `<tr><td><span class="rank mono">${String(i + 1).padStart(2, '0')}</span> <a href="#/u/${esc(l.author)}">@${esc(l.author)}</a></td><td>${l.records} rec.</td><td>${l.honey} <span class="honey">honey</span></td></tr>`).join('')}</table>` : '<p class="empty">No honey yet.</p>'}</div>
@@ -466,7 +467,9 @@ function missionPage(only, onlyCase) {
         <li>Let it work. It answers with one JSON object.</li>
         <li>Paste that JSON below and press Check. If it is valid, press Submit: the robot records it and replies on GitHub within a minute.</li>
       </ol>
-      <div class="cta-row"><button class="btn primary" id="copyp">Copy the prompt</button><a class="btn" href="#/mission${only ? `/${only}` : ''}" id="again">Another mission</a></div>
+      <p class="hint" style="margin:8px 0 0">Hunt with the AI you already use. Each button copies the mission and opens the app: paste if it is not already there, send, then paste the answer below.</p>
+      <div class="chatapps"><button class="btn primary" data-chat="chatgpt">Open in ChatGPT</button><button class="btn primary" data-chat="claude">Open in Claude</button><button class="btn primary" data-chat="gemini">Open in Gemini</button></div>
+      <div class="cta-row"><button class="btn" id="copyp">Copy the prompt</button><a class="btn" href="#/mission${only ? `/${only}` : ''}" id="again">Another mission</a></div>
       <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--dim)">Show the prompt</summary><pre class="prompt">${esc(prompt)}</pre></details>
       ${submitBox(p, c, s)}
     </div>
@@ -478,6 +481,17 @@ function missionPage(only, onlyCase) {
   </div>`;
   hydrate();
   document.getElementById('copyp').onclick = () => copy(prompt, 'Prompt copied: paste it into your AI');
+  // Copy, then open the chat app (with the prompt prefilled where the app accepts it in the link).
+  const apps = {
+    chatgpt: (q) => `https://chatgpt.com/?q=${encodeURIComponent(q)}`,
+    claude: (q) => `https://claude.ai/new?q=${encodeURIComponent(q)}`,
+    gemini: () => 'https://gemini.google.com/app',
+  };
+  app.querySelectorAll('[data-chat]').forEach((b) => (b.onclick = async () => {
+    await copy(prompt, 'Mission copied');
+    const url = apps[b.dataset.chat](prompt);
+    window.open(url.length < 8000 ? url : apps[b.dataset.chat]('').replace(/\?q=$/, ''), '_blank', 'noopener');
+  }));
   document.getElementById('again').onclick = (e) => {
     e.preventDefault();
     missionPage(only);
@@ -662,6 +676,87 @@ function wireInvite() {
   };
 }
 
+/** Horizontal bars, one series: a label, a bar, the value in text ink, a tooltip on hover. */
+function hbars(rows, { value, fmt = (v) => v, sub = () => '', max } = {}) {
+  const top = max ?? Math.max(1, ...rows.map(value));
+  if (!rows.length) return '<p class="empty">No data yet.</p>';
+  return `<div class="hbars" role="list">${rows.map((r) => {
+    const v = value(r);
+    return `<div class="hbar" role="listitem" title="${esc(r.title ?? r.label)}: ${esc(fmt(v))}${sub(r) ? ` · ${esc(sub(r))}` : ''}"><span class="hl">${esc(r.label)}</span><span class="ht"><i style="width:${Math.max(v > 0 ? 2 : 0, (v / top) * 100)}%"></i></span><span class="hv mono">${esc(fmt(v))}</span><span class="hs">${esc(sub(r))}</span></div>`;
+  }).join('')}</div>`;
+}
+
+/** Cumulative records over time, one line, a dot per day with a tooltip. */
+function timeline(points) {
+  if (!points.length) return '<p class="empty">No record yet.</p>';
+  let acc = 0;
+  const pts = points.map((p) => ({ date: p.date, v: (acc += p.n) }));
+  if (pts.length === 1) pts.unshift({ date: '', v: 0 });
+  const W = 520, H = 120, pad = 18;
+  const x = (i) => pad + (i / (pts.length - 1)) * (W - 2 * pad);
+  const y = (v) => H - pad - (v / acc) * (H - 2 * pad);
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join('');
+  return `<svg class="tl" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative records over time: ${acc} in total">
+    <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" class="axis"/>
+    <path d="${d}L${x(pts.length - 1).toFixed(1)} ${H - pad}L${pad} ${H - pad}Z" class="area"/>
+    <path d="${d}" class="line"/>
+    ${pts.map((p, i) => (p.date ? `<g class="pt"><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="9" class="hit"><title>${esc(p.date)}: ${p.v} record(s) in total</title></circle><circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="4" class="dot"/></g>` : '')).join('')}
+    <text x="${W - pad}" y="${y(acc) - 8}" text-anchor="end" class="tlv">${acc}</text>
+  </svg>`;
+}
+
+/** What the swarm learns: which models did what, which strategies win, per problem. */
+function statsPage() {
+  const L = DATA.learning ?? { global: [], problems: {} };
+  const tries = L.global.reduce((a, m) => a + m.records + m.attempts, 0);
+  const recs = L.global.reduce((a, m) => a + m.records, 0);
+  const pct = (r, t) => (t ? `${Math.round((100 * r) / t)}%` : '–');
+  app.innerHTML = `
+  <p class="kicker mono">What the swarm learns</p>
+  <h1 class="h2big" style="margin-bottom:18px">Which AI did what,<br><em>and how.</em></h1>
+  <p class="lead dimlead" style="margin-top:0">Every submission names the model that wrote its searcher and the strategy it followed. These numbers come straight from the public registry, and they steer the swarm: winning strategies are tried more, winning models are preferred, and the rest keep a fair chance.</p>
+  <div class="proof" style="margin-bottom:40px">
+    <div><b>${L.global.length}</b><span>models and searchers seen</span></div>
+    <div><b>${tries}</b><span>verified tries</span></div>
+    <div><b>${recs}</b><span>records</span></div>
+    <div><b class="txt">${esc(L.global[0]?.model ?? '–')}</b><span>most records so far</span></div>
+  </div>
+
+  <section class="panel statblock">
+    <h3>All hunts · records by model</h3>
+    ${hbars(L.global.map((m) => ({ label: m.model, ...m })), { value: (m) => m.records, sub: (m) => `${m.attempts} attempt(s) · ${pct(m.records, m.records + m.attempts)} success · ${m.honey} honey` })}
+  </section>
+
+  ${DATA.problems.map((p) => {
+    const P = L.problems[p.id] ?? { models: [], strategies: [], timeline: [] };
+    return `<section class="panel statblock">
+      <div class="statgrid">
+        <div>
+          <p class="mono secno" style="margin-bottom:6px">${esc(p.title)}</p>
+          <h3>Records over time</h3>
+          ${timeline(P.timeline)}
+        </div>
+        <div>
+          <h3>Records by model</h3>
+          ${hbars(P.models.map((m) => ({ label: m.model, ...m })), { value: (m) => m.records, sub: (m) => `${m.attempts} att. · ${pct(m.records, m.records + m.attempts)}` })}
+        </div>
+      </div>
+      <h3 style="margin-top:22px">Strategies · success rate <small class="hint">(records per try; the number of tries in grey)</small></h3>
+      ${hbars(P.strategies.map((st) => ({ label: `#${st.i} ${st.label.split(/[:.;,]/)[0]}`, title: st.label, ...st })), { value: (st) => (st.tries ? st.records / st.tries : 0), max: 1, fmt: (v) => `${Math.round(v * 100)}%`, sub: (st) => `${st.tries} tries` })}
+    </section>`;
+  }).join('')}
+
+  <section class="sec" style="padding-top:60px">
+    <p class="secno mono">The loop</p>
+    <ol class="ladder loop">
+      <li><span class="mono">1</span><h3>Hunt</h3><p>Each try records its model, strategy, score and method, failures included.</p></li>
+      <li><span class="mono">2</span><h3>Measure</h3><p>This page: records per try, per model, per strategy, per problem.</p></li>
+      <li><span class="mono">3</span><h3>Steer</h3><p>Missions pick strategies by an upper confidence bound; hives prefer models with a track record.</p></li>
+      <li><span class="mono">4</span><h3>Evolve</h3><p>Searchers that win become the parents of the next ones. The hive improves its own tools.</p></li>
+    </ol>
+  </section>`;
+}
+
 function notFound() {
   app.innerHTML = '<h1>Not here</h1><p><a href="#/">Back to the hunts</a></p>';
 }
@@ -681,6 +776,7 @@ function route() {
   if (parts[0] === 'u' && parts[1]) return hunterPage(decodeURIComponent(parts[1]));
   if (parts[0] === 'data') return dataPage();
   if (parts[0] === 'start') return joinPage();
+  if (parts[0] === 'stats') return statsPage();
   if (parts[0] === 'hive') return import('./hive.mjs').then((m) => m.hivePage(app, DATA, { toast, copy, submitUrl })).catch((e) => (app.innerHTML = `<p class="verdict bad">${esc(e.message)}</p>`));
   return notFound();
 }
