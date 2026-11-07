@@ -1,0 +1,512 @@
+{
+  "id": "no-three-in-line",
+  "title": "No three in line",
+  "tagline": "Place as many points as possible on an n x n grid with no three in a straight line.",
+  "direction": "max",
+  "score_name": "points",
+  "statement": "Choose points of the n x n grid (coordinates 0 to n-1) so that no three of them lie on a common straight line, of any slope. Score = the number of points. No solution can have more than 2n points (each row holds at most two), and a solution with exactly 2n points is perfect. Perfect solutions are published for every n up to 60; for n = 61 and above, nobody has published one yet.",
+  "format": "{ \"points\": [[0, 1], [0, 2], [1, 0], ...] }  (integers from 0 to n-1)",
+  "world_source": {
+    "label": "T. Prellberg (2026), arXiv:2602.07751: 2n points for all n <= 60; earlier table by A. Flammenkamp",
+    "url": "https://www.arxiv.org/abs/2602.07751"
+  },
+  "strategies": [
+    "Use symmetry: look only for solutions invariant under a 180-degree or 90-degree rotation of the grid (as Flammenkamp did); it shrinks the search enormously.",
+    "Backtracking row by row with exactly two points per row, pruning any choice that creates a line of three.",
+    "Start from an algebraic construction (for a prime p, the points (x, 2x^2 mod p) and their variants) and repair it into a larger set.",
+    "Local search: start from a random set of 2n points and swap points to reduce the number of collinear triples to zero.",
+    "Encode it for a SAT or constraint solver (two points per row and column, no three on any line) and add symmetry constraints.",
+    "Grow from the best known solution for a nearby n: copy it into the larger grid and add points greedily, then repair."
+  ],
+  "cases": [
+    {
+      "id": "20",
+      "n": 20,
+      "max": "40",
+      "world": {
+        "score": "40",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "21",
+      "n": 21,
+      "max": "42",
+      "world": {
+        "score": "42",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "22",
+      "n": 22,
+      "max": "44",
+      "world": {
+        "score": "44",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "23",
+      "n": 23,
+      "max": "46",
+      "world": {
+        "score": "46",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "24",
+      "n": 24,
+      "max": "48",
+      "world": {
+        "score": "48",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "25",
+      "n": 25,
+      "max": "50",
+      "world": {
+        "score": "50",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "26",
+      "n": 26,
+      "max": "52",
+      "world": {
+        "score": "52",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "27",
+      "n": 27,
+      "max": "54",
+      "world": {
+        "score": "54",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "28",
+      "n": 28,
+      "max": "56",
+      "world": {
+        "score": "56",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "29",
+      "n": 29,
+      "max": "58",
+      "world": {
+        "score": "58",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "30",
+      "n": 30,
+      "max": "60",
+      "world": {
+        "score": "60",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "31",
+      "n": 31,
+      "max": "62",
+      "world": {
+        "score": "62",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "32",
+      "n": 32,
+      "max": "64",
+      "world": {
+        "score": "64",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "33",
+      "n": 33,
+      "max": "66",
+      "world": {
+        "score": "66",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "34",
+      "n": 34,
+      "max": "68",
+      "world": {
+        "score": "68",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "35",
+      "n": 35,
+      "max": "70",
+      "world": {
+        "score": "70",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "36",
+      "n": 36,
+      "max": "72",
+      "world": {
+        "score": "72",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "37",
+      "n": 37,
+      "max": "74",
+      "world": {
+        "score": "74",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "38",
+      "n": 38,
+      "max": "76",
+      "world": {
+        "score": "76",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "39",
+      "n": 39,
+      "max": "78",
+      "world": {
+        "score": "78",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "40",
+      "n": 40,
+      "max": "80",
+      "world": {
+        "score": "80",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "41",
+      "n": 41,
+      "max": "82",
+      "world": {
+        "score": "82",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "42",
+      "n": 42,
+      "max": "84",
+      "world": {
+        "score": "84",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "43",
+      "n": 43,
+      "max": "86",
+      "world": {
+        "score": "86",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "44",
+      "n": 44,
+      "max": "88",
+      "world": {
+        "score": "88",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "45",
+      "n": 45,
+      "max": "90",
+      "world": {
+        "score": "90",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "46",
+      "n": 46,
+      "max": "92",
+      "world": {
+        "score": "92",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "47",
+      "n": 47,
+      "max": "94",
+      "world": {
+        "score": "94",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "48",
+      "n": 48,
+      "max": "96",
+      "world": {
+        "score": "96",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "49",
+      "n": 49,
+      "max": "98",
+      "world": {
+        "score": "98",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "50",
+      "n": 50,
+      "max": "100",
+      "world": {
+        "score": "100",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "51",
+      "n": 51,
+      "max": "102",
+      "world": {
+        "score": "102",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "52",
+      "n": 52,
+      "max": "104",
+      "world": {
+        "score": "104",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "53",
+      "n": 53,
+      "max": "106",
+      "world": {
+        "score": "106",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "54",
+      "n": 54,
+      "max": "108",
+      "world": {
+        "score": "108",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "55",
+      "n": 55,
+      "max": "110",
+      "world": {
+        "score": "110",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "56",
+      "n": 56,
+      "max": "112",
+      "world": {
+        "score": "112",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "57",
+      "n": 57,
+      "max": "114",
+      "world": {
+        "score": "114",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "58",
+      "n": 58,
+      "max": "116",
+      "world": {
+        "score": "116",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "59",
+      "n": 59,
+      "max": "118",
+      "world": {
+        "score": "118",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "60",
+      "n": 60,
+      "max": "120",
+      "world": {
+        "score": "120",
+        "date": "2026-02"
+      }
+    },
+    {
+      "id": "61",
+      "n": 61,
+      "max": "122",
+      "world": null
+    },
+    {
+      "id": "62",
+      "n": 62,
+      "max": "124",
+      "world": null
+    },
+    {
+      "id": "63",
+      "n": 63,
+      "max": "126",
+      "world": null
+    },
+    {
+      "id": "64",
+      "n": 64,
+      "max": "128",
+      "world": null
+    },
+    {
+      "id": "65",
+      "n": 65,
+      "max": "130",
+      "world": null
+    },
+    {
+      "id": "66",
+      "n": 66,
+      "max": "132",
+      "world": null
+    },
+    {
+      "id": "67",
+      "n": 67,
+      "max": "134",
+      "world": null
+    },
+    {
+      "id": "68",
+      "n": 68,
+      "max": "136",
+      "world": null
+    },
+    {
+      "id": "69",
+      "n": 69,
+      "max": "138",
+      "world": null
+    },
+    {
+      "id": "70",
+      "n": 70,
+      "max": "140",
+      "world": null
+    },
+    {
+      "id": "71",
+      "n": 71,
+      "max": "142",
+      "world": null
+    },
+    {
+      "id": "72",
+      "n": 72,
+      "max": "144",
+      "world": null
+    },
+    {
+      "id": "73",
+      "n": 73,
+      "max": "146",
+      "world": null
+    },
+    {
+      "id": "74",
+      "n": 74,
+      "max": "148",
+      "world": null
+    },
+    {
+      "id": "75",
+      "n": 75,
+      "max": "150",
+      "world": null
+    },
+    {
+      "id": "76",
+      "n": 76,
+      "max": "152",
+      "world": null
+    },
+    {
+      "id": "77",
+      "n": 77,
+      "max": "154",
+      "world": null
+    },
+    {
+      "id": "78",
+      "n": 78,
+      "max": "156",
+      "world": null
+    },
+    {
+      "id": "79",
+      "n": 79,
+      "max": "158",
+      "world": null
+    },
+    {
+      "id": "80",
+      "n": 80,
+      "max": "160",
+      "world": null
+    }
+  ]
+}

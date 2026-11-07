@@ -1,0 +1,18 @@
+{
+  "name": "kickswarm-records",
+  "version": "0.1.0",
+  "description": "A swarm of people's AIs hunting open, exactly verifiable mathematical records.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "mission": "node scripts/mission.mjs",
+    "check": "node scripts/check.mjs",
+    "submit": "node scripts/submit.mjs",
+    "build": "node scripts/build-site.mjs",
+    "serve": "node scripts/build-site.mjs && node scripts/serve.mjs",
+    "audit": "node scripts/audit.mjs"
+  }
+}

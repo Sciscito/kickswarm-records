@@ -1,0 +1,17 @@
+name: Submit a solution
+description: The robot judges it in seconds and answers here.
+title: "[solution] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Paste the JSON your AI (or you) produced. The robot runs the same judge as the website, records the result in the public registry, and replies here.
+        Format: `{"problem": "...", "case": "...", "centers" or "points": [...], "method": "...", "model": "..."}`
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution
+      description: The whole JSON object.
+      render: json
+    validations:
+      required: true

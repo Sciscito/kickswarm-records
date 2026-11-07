@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Get a mission
+    url: https://sciscito.github.io/kickswarm-records/#/mission
+    about: The site picks a case and a strategy for you, and gives you the prompt for your AI.

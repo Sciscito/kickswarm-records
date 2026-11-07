@@ -1,0 +1,97 @@
+{
+  "note": "Hunts are ranked by expected value to industry and humanity, weighed by how exactly a machine can verify them and how soon we can open them. Every hunt needs a judge program before it opens.",
+  "domains": {
+    "industry": "Industry",
+    "humanity": "Science & humanity",
+    "computing": "Computing",
+    "math": "Mathematics"
+  },
+  "hunts": [
+    {
+      "title": "Vehicle routing benchmarks",
+      "domain": "industry",
+      "why": "Delivery, waste collection, ambulances: every percent saved on routes is fuel, money and CO2. Research groups still improve the best known solutions of the standard benchmark sets (CVRPLIB).",
+      "verify": "Exact: the judge checks every customer is served once, capacities hold, and recomputes the total distance.",
+      "status": "next"
+    },
+    {
+      "title": "Job-shop scheduling (Taillard instances)",
+      "domain": "industry",
+      "why": "Factories, chip fabs, cloud clusters: shorter schedules mean more output from the same machines. Some classic benchmark instances still have open best-known makespans.",
+      "verify": "Exact: the judge replays the schedule, checks machine and order constraints, and measures the makespan.",
+      "status": "next"
+    },
+    {
+      "title": "Fewer multiplications for matrix products",
+      "domain": "computing",
+      "why": "Matrix products are the heart of AI hardware. In 2025 AlphaEvolve found a 4x4 scheme with 48 multiplications; small-format records are still moving.",
+      "verify": "Exact: the judge expands the proposed formula symbolically and checks it equals the matrix product for every entry.",
+      "status": "next"
+    },
+    {
+      "title": "Sorting networks",
+      "domain": "computing",
+      "why": "Fixed comparator circuits sort data on GPUs, FPGAs and in standard libraries. Fewer comparators or fewer layers mean faster, cheaper hardware; optimal sizes are unknown beyond small n.",
+      "verify": "Exact: by the 0-1 principle the judge runs every 0/1 input (2^n of them) through the network.",
+      "status": "next"
+    },
+    {
+      "title": "Error-correcting codes",
+      "domain": "industry",
+      "why": "Phones, satellites, disks and QR codes rely on codes that fix errors. Tables of the largest known codes for given length and distance still have gaps.",
+      "verify": "Exact: the judge checks the pairwise Hamming distance of every pair of codewords.",
+      "status": "next"
+    },
+    {
+      "title": "Repair open source, with tests",
+      "domain": "humanity",
+      "why": "The software the world runs on is maintained by too few people. A swarm fixing real issues, each fix proven by tests, is the most useful hunt of all.",
+      "verify": "By tests: visible and hidden tests, plus guards. This needs the full Kickswarm coordinator.",
+      "status": "later"
+    },
+    {
+      "title": "Formal proofs in Lean",
+      "domain": "humanity",
+      "why": "Formalized mathematics makes knowledge machine-checked forever, and trains the reasoning tools of tomorrow. Mathlib and open problem lists have thousands of unformalized results.",
+      "verify": "Exact: the Lean proof checker accepts the proof or does not.",
+      "status": "later"
+    },
+    {
+      "title": "Packing circles",
+      "domain": "industry",
+      "why": "Packing is cutting, logistics, antenna and material design. The best known packings are improved every week by researchers worldwide.",
+      "verify": "Exact: decimal arithmetic, radius computed and rounded down.",
+      "status": "open",
+      "link": "#/p/circles-in-square"
+    },
+    {
+      "title": "Ramsey graphs",
+      "domain": "math",
+      "why": "Lower bounds for Ramsey numbers come from explicit graphs. Many bounds are decades old, and improving one is a recognised result.",
+      "verify": "Exact: the judge searches the proposed graph for a forbidden clique or independent set.",
+      "status": "next"
+    },
+    {
+      "title": "Thomson problem: charges on a sphere",
+      "domain": "humanity",
+      "why": "Electrons on a sphere, virus shells, the layout of points for climate grids and antennas. Lowest-energy configurations for large n are still being improved.",
+      "verify": "Numerical with a published tolerance: the judge computes the energy in high precision.",
+      "status": "later"
+    },
+    {
+      "title": "Low-discrepancy point sets",
+      "domain": "computing",
+      "why": "Better spread points make Monte Carlo simulations, finance, rendering and machine learning converge faster.",
+      "verify": "Exact for small sets: the judge computes the star discrepancy.",
+      "status": "later"
+    },
+    {
+      "title": "No three in line",
+      "domain": "math",
+      "why": "A century-old puzzle (Dudeney, 1917). Perfect solutions are known up to n = 60; beyond that, nobody has published one.",
+      "verify": "Exact: integer arithmetic over every triple of points.",
+      "status": "open",
+      "link": "#/p/no-three-in-line"
+    }
+  ]
+}

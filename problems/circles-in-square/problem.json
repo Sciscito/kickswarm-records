@@ -1,0 +1,423 @@
+{
+  "id": "circles-in-square",
+  "title": "Circles in a square",
+  "tagline": "Fit n equal circles in a unit square, as large as possible.",
+  "direction": "max",
+  "score_name": "radius",
+  "statement": "Place n equal, non-overlapping circles inside the square [0,1] x [0,1] so that their common radius is as large as possible. You give only the centres; the judge computes the largest radius they allow, rounded down to 10^-30, so the score is always a radius that truly fits.",
+  "format": "{ \"centers\": [[\"0.0213\", \"0.0213\"], [\"0.0640\", \"0.0213\"], ...] }  (exactly n pairs; numbers or decimal strings, at most 30 digits after the point)",
+  "world_source": {
+    "label": "Packomania (E. Specht), best known packings of equal circles in a square",
+    "url": "https://www.packomania.com/csq/csq.html"
+  },
+  "strategies": [
+    "Start from the current best and run a gentle relaxation: treat circles as slightly soft disks, grow the radius, and push overlapping pairs apart (Lubachevsky-Stillinger style).",
+    "Find the tightest contacts of the current best, perturb the few circles around them, and re-optimize locally.",
+    "Start from a hexagonal lattice cut to fit n circles, then relax; try several lattice orientations and offsets.",
+    "Identify 'rattlers' (circles that touch nothing) in the current best, remove them, compress the rest, and reinsert them in the largest holes.",
+    "Simulated annealing on the positions with a slowly shrinking step, always keeping the best configuration seen.",
+    "Treat it as a nonlinear program: maximize r subject to all pair and wall constraints (penalty method or SLSQP), started from the current best."
+  ],
+  "cases": [
+    {
+      "id": "480",
+      "n": 480,
+      "world": {
+        "score": "0.024028512101",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "481",
+      "n": 481,
+      "world": {
+        "score": "0.023977471713",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "482",
+      "n": 482,
+      "world": {
+        "score": "0.023957848585",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "483",
+      "n": 483,
+      "world": {
+        "score": "0.023944183078",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "484",
+      "n": 484,
+      "world": {
+        "score": "0.023934596439",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "485",
+      "n": 485,
+      "world": {
+        "score": "0.023922879628",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "486",
+      "n": 486,
+      "world": {
+        "score": "0.023897363115",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "487",
+      "n": 487,
+      "world": {
+        "score": "0.023857162389",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "488",
+      "n": 488,
+      "world": {
+        "score": "0.023845883704",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "489",
+      "n": 489,
+      "world": {
+        "score": "0.023828656335",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "490",
+      "n": 490,
+      "world": {
+        "score": "0.023820945609",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "491",
+      "n": 491,
+      "world": {
+        "score": "0.023815903727",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "492",
+      "n": 492,
+      "world": {
+        "score": "0.023813642711",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "493",
+      "n": 493,
+      "world": {
+        "score": "0.023764621202",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "494",
+      "n": 494,
+      "world": {
+        "score": "0.023629218332",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "495",
+      "n": 495,
+      "world": {
+        "score": "0.023586972763",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "496",
+      "n": 496,
+      "world": {
+        "score": "0.023554437975",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "497",
+      "n": 497,
+      "world": {
+        "score": "0.023537861545",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "498",
+      "n": 498,
+      "world": {
+        "score": "0.023505387515",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "499",
+      "n": 499,
+      "world": {
+        "score": "0.023474207690",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "500",
+      "n": 500,
+      "world": {
+        "score": "0.023455593403",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "501",
+      "n": 501,
+      "world": {
+        "score": "0.023446330452",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "502",
+      "n": 502,
+      "world": {
+        "score": "0.023428677341",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "503",
+      "n": 503,
+      "world": {
+        "score": "0.023412873631",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "504",
+      "n": 504,
+      "world": {
+        "score": "0.023394002419",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "505",
+      "n": 505,
+      "world": {
+        "score": "0.023381359681",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "506",
+      "n": 506,
+      "world": {
+        "score": "0.023313404379",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "507",
+      "n": 507,
+      "world": {
+        "score": "0.023273743511",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "508",
+      "n": 508,
+      "world": {
+        "score": "0.023245666174",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "509",
+      "n": 509,
+      "world": {
+        "score": "0.023233386660",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "510",
+      "n": 510,
+      "world": {
+        "score": "0.023218194418",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "511",
+      "n": 511,
+      "world": {
+        "score": "0.023211353711",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "512",
+      "n": 512,
+      "world": {
+        "score": "0.023203806176",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "513",
+      "n": 513,
+      "world": {
+        "score": "0.023201641296",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "514",
+      "n": 514,
+      "world": {
+        "score": "0.023189165983",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "515",
+      "n": 515,
+      "world": {
+        "score": "0.023145344822",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "516",
+      "n": 516,
+      "world": {
+        "score": "0.023112888395",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "517",
+      "n": 517,
+      "world": {
+        "score": "0.023107232217",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "518",
+      "n": 518,
+      "world": {
+        "score": "0.023087769656",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "519",
+      "n": 519,
+      "world": {
+        "score": "0.023080842681",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "520",
+      "n": 520,
+      "world": {
+        "score": "0.023068486583",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "521",
+      "n": 521,
+      "world": {
+        "score": "0.023063698115",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "522",
+      "n": 522,
+      "world": {
+        "score": "0.023042109322",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "523",
+      "n": 523,
+      "world": {
+        "score": "0.023041166846",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "524",
+      "n": 524,
+      "world": {
+        "score": "0.023032859074",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "525",
+      "n": 525,
+      "world": {
+        "score": "0.023029125130",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "526",
+      "n": 526,
+      "world": {
+        "score": "0.022972259572",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "527",
+      "n": 527,
+      "world": {
+        "score": "0.022954824572",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "528",
+      "n": 528,
+      "world": {
+        "score": "0.022949448069",
+        "date": "2026-11-07"
+      }
+    },
+    {
+      "id": "529",
+      "n": 529,
+      "world": {
+        "score": "0.022923247733",
+        "date": "2026-11-07"
+      }
+    }
+  ]
+}

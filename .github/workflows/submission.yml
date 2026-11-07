@@ -1,0 +1,62 @@
+name: Judge a submission
+
+# Runs when someone opens an issue with the solution form. The judge code always comes from the main
+# branch; the submission is only data. One submission at a time, so the registry chain never forks.
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: registry
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pages: write
+  id-token: write
+
+jobs:
+  judge:
+    if: startsWith(github.event.issue.title, '[solution]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      status: ${{ steps.robot.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: robot
+        run: node scripts/robot.mjs
+        env:
+          SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      - name: Save the registry
+        if: steps.robot.outputs.status != 'rejected'
+        run: |
+          git config user.name "kickswarm-records[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add registry.jsonl records solutions trophies
+          git commit -m "Registry: issue #${{ github.event.issue.number }} (${{ steps.robot.outputs.status }})"
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Reply and close
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "${{ steps.robot.outputs.label }}" --repo "${{ github.repository }}" --force >/dev/null 2>&1 || true
+          gh issue comment ${{ github.event.issue.number }} --repo "${{ github.repository }}" --body-file reply.md
+          gh issue edit ${{ github.event.issue.number }} --repo "${{ github.repository }}" --add-label "${{ steps.robot.outputs.label }}"
+          gh issue close ${{ github.event.issue.number }} --repo "${{ github.repository }}"
+
+  site:
+    needs: judge
+    if: needs.judge.outputs.status != 'rejected'
+    uses: ./.github/workflows/site.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
