@@ -14,6 +14,8 @@ import { BEE, icon } from './icons.mjs';
 import { createIdentity, getIdentity, identitySummary } from './identity.mjs';
 import { sendPresence } from './lib/presence.mjs';
 import { fit, needFor, weightOf } from './lib/delegate.mjs';
+import { huntMode, nextHunt, shares } from './lib/focus.mjs';
+import { readPresence } from './lib/presence.mjs';
 import { ACCEPT_PHRASE, API_MODE_RISKS, BILLING_WARNING, gatePaid, moneyOk, nextApiMode } from './lib/safety.mjs';
 
 const PRESET_ICON = { discreet: 'moon', balanced: 'hive', free: 'leaf', full: 'flame' };
@@ -79,7 +81,8 @@ function browserBackend(DATA) {
   let wake = null;
   const log = (msg, slot = null) => emit('log', { t: new Date().toISOString(), slot, msg });
   const save = () => { store.set('ks-hive-settings', settings); store.set('ks-hive-stats', stats); store.set('ks-hive-usage', usage); store.set('ks-hive-improvements', improvements.slice(-100)); store.set('ks-hive-library', library.slice(-40)); };
-  const snapshot = () => ({ running, stopping, runs, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
+  let focus = null, live = { at: 0, hunters: [] };
+  const snapshot = () => ({ focus, running, stopping, runs, active: [...active.entries()].map(([slot, a]) => ({ slot, ...a })), stats, usage: usage[today()] ?? {}, improvements: improvements.slice(-30).reverse(), waiting: running && !inWindow(settings.schedule) });
 
   // An AI model running on this device's graphics chip (WebGPU): no key, no account, free.
   // Downloaded once (about 1 GB) after the person asks for it, then cached by the browser.
@@ -168,8 +171,11 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
   }
 
   async function slot(i, round, data) {
-    const only = settings.problems?.length ? settings.problems : null;
-    const m = pickMission(data, Math.random, only ? only[Math.floor(Math.random() * only.length)] : undefined);
+    // Which hunt: the swarm's (friends, then the crowd, then the common hunt) unless you chose shares.
+    if (Date.now() - live.at > 60000) live = { at: Date.now(), hunters: await readPresence(data.config?.relay).catch(() => []) };
+    const pick = nextHunt(settings, { problems: data.problems, hunters: live.hunters, me: getIdentity()?.name ?? null, friends: store.get('ks-friends', []), fallback: data.config?.focus });
+    focus = pick.focus;
+    const m = pickMission(data, Math.random, pick.pid);
     if (!m) return;
     const p = m.problem;
     const cur = await fetch(`records/${p.id}/${m.cas.id}.json`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -266,7 +272,7 @@ self.onmessage = async (e) => { try { await search(e.data, (s) => self.postMessa
     async state() { if (!sources.length) await discover(); return publicState(); },
     async apiMode(req) { settings = gatePaid({ ...settings, apiMode: nextApiMode(settings.apiMode, req) }); save(); if (req.on === true && !settings.apiMode.on) throw new Error('API mode stays off: tick the three boxes and type the phrase exactly.'); return publicState(); },
     async preset(name) { settings = { ...fromPreset(name, cores), apiMode: settings.apiMode, workers: Math.max(1, Math.min(cores - 1 || 1, Math.round(cores * PRESETS[name].cores))), disabled: settings.disabled, problems: settings.problems }; settings = gatePaid(settings); save(); return publicState(); },
-    async settings(s) { const { apiMode: _ignored, ...patch } = s; s = patch; settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) } }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); settings = gatePaid(settings); save(); return publicState(); },
+    async settings(s) { const { apiMode: _ignored, ...patch } = s; s = patch; settings = { ...settings, ...s, tiers: { ...settings.tiers, ...(s.tiers ?? {}) }, quotas: { ...settings.quotas, ...(s.quotas ?? {}) }, schedule: { ...settings.schedule, ...(s.schedule ?? {}) }, ...(s.weights ? { weights: { ...s.weights } } : {}) }; settings.workers = Math.max(1, Math.min(cores, Number(settings.workers) || 1)); settings = gatePaid(settings); save(); return publicState(); },
     async key(provider, key) {
       if (key && PROVIDERS[provider]?.tier === 'paid' && !settings.apiMode?.on) throw new Error('This is a paid API: turn API mode on first (it explains the risks).');
       if (key) await listModels(provider, key).catch((e) => { throw new Error(`the key did not work: ${e.message}`); });
@@ -420,6 +426,8 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     const top = Object.entries(count).sort((x, y) => y[1] - x[1])[0]?.[0];
     if (top) return top;
     if ((s.problems ?? []).length === 1) return s.problems[0];
+    if (huntMode(s) === 'swarm' && h.focus?.id) return h.focus.id;
+    if (huntMode(s) === 'swarm') return DATA.config?.focus ?? DATA.problems.find((p) => p.flagship)?.id;
     return h.improvements?.[0]?.problem ?? s.problems?.[0] ?? DATA.problems.find((p) => p.flagship)?.id ?? DATA.problems[0]?.id ?? null;
   };
   const syncWar = async () => {
@@ -571,7 +579,20 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
         <div class="row"><label class="switch"><input type="checkbox" id="sched" ${s.schedule?.enabled ? 'checked' : ''}><span></span></label> Only between <input type="time" id="from" value="${esc(s.schedule?.from ?? '23:00')}"> and <input type="time" id="to" value="${esc(s.schedule?.to ?? '07:00')}"></div>
         ${local ? `<div class="row">${st.schedule?.installed ? 'Runs every night on this computer, even with this page closed. <button class="btn small" id="unsched">Remove</button>' : '<button class="btn small" id="install">Run every night on this computer</button><small class="hint">Creates a scheduled task (Windows Task Scheduler or cron) at the start time above. You can remove it here.</small>'}</div>` : ''}
         ${local ? `<div class="row"><label class="switch"><input type="checkbox" id="autosub" ${s.submit !== 'none' ? 'checked' : ''}><span></span></label> Publish improvements automatically on GitHub (with your GitHub CLI login). Off: they wait in hunts/outbox.</div>` : '<div class="row hint">In the browser, each improvement waits for your click on Submit.</div>'}
-        <div class="row hunts">Hunts: ${DATA.problems.map((p) => `<label><input type="checkbox" data-problem="${p.id}" ${!s.problems?.length || s.problems.includes(p.id) ? 'checked' : ''}> ${esc(p.title)}</label>`).join('')}</div>
+        ${(() => {
+          const mode = huntMode(s);
+          const sh = shares(s, DATA.problems);
+          const total = Object.values(sh).reduce((t, v) => t + v, 0) || 1;
+          const fid = h.focus?.id ?? DATA.config?.focus;
+          const why = { friends: 'where your friends are', crowd: 'where most hunters are', common: 'the common hunt of the moment' }[h.focus?.why ?? 'common'];
+          return `<div class="huntmode">
+            <b>Where your hive hunts</b>
+            <label><input type="radio" name="hmode" value="swarm" ${mode === 'swarm' ? 'checked' : ''}> <span><b>Together with the swarm</b> (recommended): everyone on the same hunt to advance faster. Now: <b>${esc(DATA.problems.find((p) => p.id === fid)?.title ?? '…')}</b>, ${why}.</span></label>
+            <label><input type="radio" name="hmode" value="pick" ${mode === 'pick' ? 'checked' : ''}> <span><b>My hunts, my shares</b>: give each hunt a percentage of your power.</span></label>
+            <label><input type="radio" name="hmode" value="all" ${mode === 'all' ? 'checked' : ''}> <span><b>Spread over every hunt</b> (for big hives).</span></label>
+            ${mode === 'pick' ? `<div class="shares">${DATA.problems.map((p) => { const v = s.weights?.[p.id] ?? (s.problems?.length ? (s.problems.includes(p.id) ? 50 : 0) : 50); return `<label class="share"><span>${esc(p.title)}</span><input type="range" min="0" max="100" step="5" value="${v}" data-weight="${p.id}"><output>${Math.round(((sh[p.id] ?? 0) / total) * 100)}%</output></label>`; }).join('')}</div>` : ''}
+          </div>`;
+        })()}
       </section>
     </div>
 
@@ -652,7 +673,15 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
     $('#sched').onchange = sched;
     $('#from').onchange = sched;
     $('#to').onchange = sched;
-    app.querySelectorAll('[data-problem]').forEach((c) => (c.onchange = () => patch({ problems: [...app.querySelectorAll('[data-problem]:checked')].map((x) => x.dataset.problem) })));
+    app.querySelectorAll('input[name="hmode"]').forEach((r) => (r.onchange = () => patch({ mode: r.value, ...(r.value === 'pick' && !st.settings.problems?.length ? { problems: DATA.problems.map((p) => p.id) } : {}) })));
+    app.querySelectorAll('[data-weight]').forEach((r) => {
+      r.oninput = () => { r.nextElementSibling.textContent = `${r.value}`; };
+      r.onchange = () => {
+        const weights = { ...(st.settings.weights ?? {}) };
+        app.querySelectorAll('[data-weight]').forEach((x) => (weights[x.dataset.weight] = Number(x.value)));
+        patch({ mode: 'pick', weights, problems: Object.keys(weights).filter((k) => weights[k] > 0) });
+      };
+    });
     app.querySelectorAll('[data-savekey]').forEach((b) => (b.onclick = async () => {
       const id = b.dataset.savekey;
       const v = app.querySelector(`[data-keyfor="${id}"]`).value.trim();
@@ -710,7 +739,7 @@ export async function hivePage(app, DATA, { toast, copy, submitUrl }) {
   const joined = (() => { try { const v = sessionStorage.getItem('ks-join'); sessionStorage.removeItem('ks-join'); return v; } catch { return null; } })();
   if (joined && DATA.problems.some((x) => x.id === joined)) {
     try {
-      st = await be.settings({ problems: [joined], autostart: true });
+      st = await be.settings({ mode: 'pick', problems: [joined], weights: { [joined]: 100 }, autostart: true });
       if (!st.hive.running) st = await be.start();
       toast(`You joined the ${DATA.problems.find((x) => x.id === joined).title} hunt`);
     } catch (e) { toast(e.message); }

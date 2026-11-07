@@ -826,3 +826,14 @@ canvas.planet { display: block; width: 100%; max-width: min(100%, 72vh); aspect-
 .wrow.on a { color: inherit; }
 .wrow.on .ws a { color: #8fb6ff; }
 .linkbtn { background: none; border: 0; padding: 0; color: #ffd34d; font: inherit; cursor: pointer; text-decoration: underline; }
+
+/* ===== Where the hive hunts ===== */
+.huntmode { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--line); }
+.huntmode > label { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--dim); cursor: pointer; }
+.huntmode > label b { color: var(--ink); }
+.huntmode input[type="radio"] { margin-top: 4px; accent-color: var(--honey); }
+.shares { display: grid; gap: 6px; margin: 4px 0 0 24px; }
+.share { display: grid; grid-template-columns: minmax(0, 1fr) 140px 44px; gap: 10px; align-items: center; font-size: 13px; }
+.share input { accent-color: var(--honey); width: 100%; }
+.share output { font: 600 13px var(--mono); color: var(--honey); text-align: right; }
+@media (max-width: 520px) { .share { grid-template-columns: 1fr 100px 40px; } }

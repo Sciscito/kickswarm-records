@@ -98,7 +98,7 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick, me:
     lastAgents = agents;
     const groups = {};
     for (const a of agents) (groups[a.case] ??= []).push(a);
-    const attacks = Object.entries(groups).filter(([cid]) => index[cid] != null).map(([cid, list]) => ({ region: index[cid], agents: list.map((a) => ({ color: hunterColor(a.who, me) ?? '#5fd17a', me: a.who === me || a.who === 'you' })) }));
+    const attacks = Object.entries(groups).filter(([cid]) => index[cid] != null).map(([cid, list]) => ({ region: index[cid], agents: list.map((a) => ({ name: a.who, color: hunterColor(a.who, me) ?? '#5fd17a', me: a.who === me || a.who === 'you', friend: friends.includes(a.who) })) }));
     const mine = agents.filter((a) => a.who === me || a.who === 'you');
     const targets = [...new Set(mine.map((a) => index[a.case]).filter((x) => x != null))];
     if (focus && index[focus] != null && !targets.includes(index[focus])) { targets.push(index[focus]); if (!groups[focus]) attacks.push({ region: index[focus], agents: [{ color: '#f2b33d', me: true }] }); }
@@ -136,13 +136,14 @@ export function warRoom(el, { DATA, pid, focus = null, mode = 'map', onPick, me:
       <p class="wwhere"><b>Where it goes:</b> a record goes to the public registry and becomes everyone's new starting point (+honey, a card). A valid try or a dead end goes to the shared journal, so nobody repeats it. ${im.today.dead ? `${im.today.dead} dead end${im.today.dead > 1 ? 's' : ''} mapped today.` : ''}</p>`;
     // Everyone online, on any hunt: where they are, and one click to follow them.
     const title = (pid) => DATA.problems.find((x) => x.id === pid)?.title ?? pid;
-    const online = hunters.filter((h) => (h.agents ?? []).length && h.name !== me);
+    const online = hunters.filter((h) => (h.agents ?? []).length && h.name !== me)
+      .sort((x, y) => (friends.includes(y.name) - friends.includes(x.name)) || (y.agents.some((a) => a.problem === p.id) - x.agents.some((a) => a.problem === p.id)) || y.agents.length - x.agents.length);
     q('swarm').innerHTML = `<div class="wstats"><span><b>${[...hereNames].length}</b> hunters here</span><span><b>${agents.length}</b> agents here</span><span><b>${onlineNames.size}</b> online in all</span></div>
       ${online.length ? `<div class="wonline">${online.slice(0, 12).map((h) => {
         const pids = [...new Set(h.agents.map((a) => a.problem))];
         const here = pids.includes(p.id);
         return `<div class="wrow on"><i class="pdot"></i><a href="#/u/${esc(h.name)}"><b style="color:${hunterColor(h.name, me)}">${esc(h.name)}</b></a><span class="ws ${here ? 'up' : ''}">${here ? `⚔ here` : `<a href="#/map/${esc(pids[0])}">on ${esc(title(pids[0]))}${pids.length > 1 ? ` +${pids.length - 1}` : ''}</a>`}</span><small>${h.agents.length} agent${h.agents.length > 1 ? 's' : ''} · ${esc(h.device === 'computer' ? 'computer' : 'browser')}${friends.includes(h.name) ? ' · your friend' : ` · <button class="linkbtn" data-follow="${esc(h.name)}">+ Follow</button>`}</small></div>`;
-      }).join('')}</div>` : '<p class="wempty">Nobody else online right now.</p>'}`;
+      }).join('')}${online.length > 12 ? `<p class="wempty">and ${online.length - 12} more hunter(s) online</p>` : ''}</div>` : '<p class="wempty">Nobody else online right now.</p>'}`;
     q('swarm').querySelectorAll('[data-follow]').forEach((b) => (b.onclick = () => {
       if (!friends.includes(b.dataset.follow)) friends.push(b.dataset.follow);
       try { localStorage.setItem('ks-friends', JSON.stringify(friends)); } catch {}

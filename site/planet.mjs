@@ -240,15 +240,37 @@ export function mountPlanet(cv, { regions, onPick, onHover, compact = false }) {
       }
       if (R.crown) { const s = R.crown === 'world' ? SPR.crown : SPR.star; sprite(ctx, s, x - s[0].length, y - 18, { 1: '#ffd34d' }, 2); }
     });
-    // Pixel bees flying around the territories they attack.
+    // Pixel bees flying around the territories they attack. A crowd is summarised so a big swarm never
+    // slows the page: you and your friends first (with your names), then up to a few others, then "+N".
+    let drawn = 0;
+    const tags = [];
     for (const a of attacks) {
       const [x, y] = cent[a.region] ?? []; if (x == null) continue;
-      a.agents.slice(0, 8).forEach((ag, k) => {
-        const ang = now * (1.4 + (k % 3) * 0.25) + (k * Math.PI * 2) / Math.min(8, a.agents.length) + a.region;
+      const list = [...a.agents].sort((p2, q2) => (q2.me - p2.me) || (q2.friend - p2.friend));
+      const vip = list.filter((ag) => ag.me || ag.friend);
+      const room = Math.max(vip.length, Math.min(6, 60 - drawn));
+      const show = list.slice(0, room);
+      const rest = list.length - show.length;
+      show.forEach((ag, k) => {
+        const ang = now * (1.4 + (k % 3) * 0.25) + (k * Math.PI * 2) / Math.max(1, show.length) + a.region;
         const rad = 14 + (k % 3) * 5;
         const bx = x + Math.cos(ang) * rad, by = y - 6 + Math.sin(ang) * rad * 0.55 + Math.sin(now * 9 + k) * 1.2;
-        sprite(ctx, SPR.bee, bx - 8, by - 5, { w: 'rgba(235,245,255,.85)', b: ag.color, k: '#15120c', o: '#000' }, ag.me ? 2 : 1.6, Math.sin(ang) > 0);
+        sprite(ctx, SPR.bee, bx - 8, by - 5, { w: 'rgba(235,245,255,.85)', b: ag.color, k: '#15120c', o: '#000' }, ag.me || ag.friend ? 2 : 1.4, Math.sin(ang) > 0);
+        if ((ag.me || ag.friend) && ag.name) tags.push([bx, by - 9, ag.me ? 'YOU' : ag.name.slice(0, 10).toUpperCase(), ag.color]);
       });
+      drawn += show.length;
+      if (rest > 0) {
+        const label = `+${rest}`;
+        ctx.font = '8px Silkscreen, monospace';
+        const w2 = ctx.measureText(label).width + 6;
+        ctx.fillStyle = '#0c0b09'; ctx.fillRect(Math.round(x + 14), Math.round(y - 22), Math.round(w2), 11);
+        ctx.fillStyle = '#ffd34d'; ctx.fillText(label, Math.round(x + 14 + w2 / 2), Math.round(y - 16));
+      }
+    }
+    for (const [tx, ty, label, color] of tags) {
+      ctx.font = '8px Silkscreen, monospace';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,10,20,.95)'; ctx.strokeText(label, Math.round(tx), Math.round(ty));
+      ctx.fillStyle = color; ctx.fillText(label, Math.round(tx), Math.round(ty));
     }
     // Your hive.
     if (targets.length || compact === false) {

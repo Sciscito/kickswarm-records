@@ -77,3 +77,18 @@ test('money safety: paid APIs stay locked unless API mode is turned on by hand',
   const env = envWithoutApiKeys({ PATH: '/bin', ANTHROPIC_API_KEY: 'x', OPENAI_API_KEY: 'y', GEMINI_API_KEY: 'z' });
   assert.deepEqual(Object.keys(env), ['PATH']);
 });
+
+test('hives hunt together by default: friends first, then the crowd, then the common hunt; shares when chosen', async () => {
+  const { focusHunt, nextHunt, huntMode } = await import('../lib/focus.mjs');
+  const problems = [{ id: 'a' }, { id: 'b', flagship: true }, { id: 'c' }];
+  const h = (name, ...ps) => ({ name, agents: ps.map((problem) => ({ problem })) });
+  assert.equal(huntMode({}), 'swarm');
+  assert.equal(huntMode({ problems: ['a'] }), 'pick');
+  assert.deepEqual(focusHunt({ problems, hunters: [], fallback: 'c' }), { id: 'c', why: 'common' });
+  assert.equal(focusHunt({ problems, hunters: [h('x', 'a', 'a'), h('y', 'b')] }).id, 'a');
+  assert.equal(focusHunt({ problems, hunters: [h('x', 'a', 'a'), h('pal', 'b')], friends: ['pal'] }).id, 'b');
+  assert.equal(focusHunt({ problems, hunters: [h('me', 'c', 'c', 'c'), h('x', 'a')], me: 'me' }).id, 'a', 'your own agents do not pull the swarm');
+  assert.equal(nextHunt({ mode: 'all' }, { problems }).pid, undefined);
+  const picks = new Set(Array.from({ length: 50 }, (_, k) => nextHunt({ mode: 'pick', problems: ['a', 'c'], weights: { a: 100, c: 0 } }, { problems }, () => k / 50).pid));
+  assert.deepEqual([...picks], ['a'], 'a share of 0% gets nothing');
+});
